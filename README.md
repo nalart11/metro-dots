@@ -8,6 +8,8 @@ Metro desktop for this Arch Linux / Hyprland 0.55.4 Lua installation. Straight e
 
 ![Quick Settings](docs/screenshots/settings.png)
 
+![Metro Settings application](docs/screenshots/control-panel.png)
+
 ![Taskbar](docs/screenshots/taskbar.png)
 
 Screenshots are from the actual session. Wallpapers and the four-panel Start symbol are original procedural SVG designs. Application icons come from installed icon themes.
@@ -45,7 +47,7 @@ Lists backup paths, managed files, missing packages and user services. Creates n
 
 ## Configuration
 
-`~/.config/hypr-win8/theme.json` and `tiles.json` are watched live. `config/` is the source for installed UI files; use `update.sh` after editing project code. Personal theme/tiles edits survive updates. Main Lua config is generated from the current entrypoint, preserving later user changes.
+`~/.config/hypr-win8/theme.json`, `tiles.json` and `pins.json` are watched live. `config/` is the source for installed UI files; use `update.sh` after editing project code. Personal theme/tiles edits survive updates. Main Lua config is generated from the current entrypoint, preserving later user changes.
 
 Logs: `~/.local/state/hypr-win8/install.log` and `shell.log`. Diagnostics:
 
@@ -62,13 +64,13 @@ Press Super or click the Start button. Start fills the active monitor. Type to s
 
 ## Tiles
 
-Each JSON tile contains `name`, `group`, `x`, `y`, `w`, `h`, `color` and optionally `icon`, `desktop`, `command` or `action`. Coordinates use grid units; supported sizes are 1×1, 2×1 and 2×2. `command` is an argument array, not a shell string. Desktop IDs use installed `.desktop` entries. `live` supports clock/system/network/music/calendar/battery. The installer rejects overlapping or unsupported tiles. Names, colors and layout are editable independently of the shell.
+Each JSON tile contains `name`, `group`, `x`, `y`, `w`, `h`, `color` and optionally `icon`, `desktop`, `command` or `action`. Coordinates use grid units; supported sizes are 1×1, 2×1 and 2×2. `command` is an argument array, not a shell string. Desktop IDs use installed `.desktop` entries. `live` supports clock/system/network/music/calendar/battery. Right-click an app in All Apps, a tile or a taskbar app to pin/unpin it. Start and taskbar pins are independent. The Settings application also exposes both pin controls. Start additions use a Pinned group and choose an empty grid cell; pins.json stores taskbar desktop IDs. Changes survive restarts and updates. The installer rejects overlapping or unsupported tiles. Names, colors and layout are editable independently of the shell.
 
 Applications use GioUnix.DesktopAppInfo for catalog and launching. GIO honors Name/Icon/NoDisplay/Hidden/OnlyShowIn/TryExec/Categories and monitors installed desktop entries for changes. Stale unavailable launchers are excluded. Quickshell supplies icon lookup for running windows. Terminal entries launch through kitty with parsed desktop-field substitutions. Raw Exec strings are never passed to a shell. The explicit `> command` search mode runs a user-entered shell command.
 
 ## Theme
 
-`mode` is dark/light. Central keys: background, surface, surfaceSecondary, accent, foreground, muted, danger, success, font, wallpaper. Quick Settings exposes mode and six accent colors. Wallpapers: metro-blue.svg, metro-purple.svg and metro-green.svg under assets/wallpapers. Hyprlock uses the rendered metro-blue.png. Shell theme changes do not modify GTK/Kvantum or the existing terminal configuration.
+`mode` is dark/light. Central keys: background, surface, surfaceSecondary, accent, foreground, muted, danger, success, font, wallpaper. The Metro Settings application exposes mode, six accent colors, a file picker for local wallpapers, recent backgrounds and fill/fit/stretch placement. Quick Settings contains daily controls only; Wi-Fi/Bluetooth symbol buttons toggle radio, while the rest of each tile opens a separate network/device menu. Wallpapers: metro-blue.svg, metro-purple.svg and metro-green.svg under assets/wallpapers. Hyprlock uses the rendered metro-blue.png. Shell theme changes do not modify GTK/Kvantum or the existing terminal configuration.
 
 ## Keybinds
 
@@ -76,8 +78,8 @@ Applications use GioUnix.DesktopAppInfo for catalog and launching. GIO honors Na
 | --- | --- | --- |
 | Super: old search | Super: Start | Full-screen launcher |
 | Super+C: editor | Super+C: Charms; Super+Alt+C: editor | Required Charms shortcut; preserve Super+Shift+C color picker |
-| Super+Q: close | Super+Q: Search; Alt+F4: close | Required search shortcut; conventional close |
-| Super+I: old settings | Super+I: Metro Settings | Unified controls |
+| Super+Q: close | Super+Q: close; Super+Slash: Search | User preference restored; Alt+F4 removed |
+| Super+I: old settings | Super+I: compact Quick Settings | Daily controls; All settings opens the full application |
 | Super+L: session lock | Super+L: hyprlock | Independent lockscreen |
 | Super+Tab: old overview | Super+Tab: workspace selector | Metro integration |
 | Alt+Tab | Alt+Tab: window selector | Stable title-based switching |
@@ -142,3 +144,11 @@ Choose disable/quarantine Win8 files, restore the original configuration, or can
 ## Validation
 
 See [acceptance report](docs/ACCEPTANCE.md) and machine-readable reports under docs/. The isolated recovery test is `python3 -B tests/restore.py`; it restores a disposable fixture home, never the live configuration.
+
+## Metro Settings application
+
+Run `hypr-win8 control-panel`, select Metro Settings in All Apps, or use All settings in the quick panel. This is a standard resizable Wayland window with System, Personalization, Network, Bluetooth, Sound, Apps and About categories. Personalization offers a real read-only file picker and a path field; image validation happens before changing the wallpaper. Images stay at their original filesystem location. Paths with spaces, non-ASCII characters, # and % are supported. User colors and wallpaper choices are kept on update.
+
+Start animation: background 100 ms; heading begins at 70 ms with 25 px translation; groups begin at 80 ms with 15 ms stagger and offsets 80/110/140 px, settling at about 300 ms. Tile easing follows cubic-bezier(0.1,0.9,0.2,1). Closing keeps the surface alive for 230 ms with reverse group motion before the background fades. Clicking a tile compresses only its contents to 0.96 for 70 ms. Quickshell performs these transitions; the compositor's overlay animation is disabled to avoid a second slide/scale. Side panels enter over 220 ms. Taskbar system controls have reserved widths, explicit SVG symbols and no hover tooltips; the clock uses two unclipped lines.
+
+Implementation references: [Quickshell FloatingWindow](https://quickshell.org/docs/v0.2.1/types/Quickshell/FloatingWindow/), [Qt FileDialog](https://doc.qt.io/qt-6/qml-qtquick-dialogs-filedialog.html), [Hyprland layer rules](https://wiki.hypr.land/configuring/core/rules/layer-rules/).

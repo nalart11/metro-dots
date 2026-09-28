@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Параметры Metro
+Name[en]=Metro Settings
+Comment=Системные настройки и персонализация
+Exec=/home/nalart11/.local/bin/hypr-win8 control-panel
+Icon=preferences-system
+Terminal=false
+Categories=Settings;DesktopSettings;
+StartupNotify=false

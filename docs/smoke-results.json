@@ -4,7 +4,7 @@
   "Super opens Start": true,
   "Super+C opens Charms": true,
   "Super+I opens Settings": true,
-  "Super+Q opens Search": true,
+  "Super+Slash opens Search": true,
   "Search accepts typing and filters apps": true,
   "Typing on Start activates Search": true,
   "Super+Tab opens Workspaces": true,
@@ -22,27 +22,38 @@
   "hypr-win8-shell.service": true,
   "hypr-win8-clipboard-text.service": true,
   "hypr-win8-clipboard-image.service": true,
-  "idle_cpu_percent_one_core": 0.8,
+  "idle_cpu_percent_one_core": 0.5,
   "No QML errors or runtime type errors": true,
   "Expired notifications remain in safe history": true,
   "status": {
     "page": "",
-    "apps": 112,
+    "apps": 113,
     "tiles": 14,
     "screens": 2,
     "notifications": 2,
     "query": "",
-    "results": 112,
+    "results": 113,
     "tray": 3,
     "monitor": "DP-6",
     "polkitRegistered": true,
     "liveNotifications": 0,
     "stats": {
-      "cpu": 9,
+      "cpu": 6,
       "ram": 34,
-      "temperature": 58,
+      "temperature": 54,
       "brightness": null
-    }
+    },
+    "displayPage": "",
+    "closing": true,
+    "backgroundOpacity": 0,
+    "pins": [
+      "firefox.desktop",
+      "org.gnome.Nautilus.desktop",
+      "kitty.desktop",
+      "codium.desktop"
+    ],
+    "settingsVisible": false,
+    "settingsSection": "system"
   },
-  "timestamp": "2026-09-28 19:28:59"
+  "timestamp": "2026-09-28 19:54:32"
 }

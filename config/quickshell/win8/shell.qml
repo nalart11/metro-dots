@@ -24,6 +24,16 @@ ShellRoot {
     readonly property bool validation: Quickshell.env("HYPR_WIN8_VALIDATE") === "1"
     readonly property bool preview: Quickshell.env("HYPR_WIN8_PREVIEW") === "1"
     property string page: ""
+    property string displayPage: ""
+    property bool closing: false
+    property bool settingsVisible: false
+    property int transitionSerial: 0
+    property real backgroundOpacity: 0
+    property real sideOffset: 44
+    property real titleOffset: 25
+    property real titleOpacity: 0
+    property var pinIds: []
+    property var pendingLaunch: []
     property string query: ""
     property string errorMessage: ""
     property string pendingPower: ""
@@ -56,9 +66,45 @@ ShellRoot {
     readonly property var apps: appCatalog
     readonly property var filteredApps: apps.filter(a => (a.name + " " + a.genericName + " " + a.categories.join(" ") + " " + a.keywords.join(" ")).toLowerCase().includes(query.toLowerCase()))
     readonly property var windows: ToplevelManager.toplevels.values
+    onSettingsVisibleChanged: {updateScan();if(settingsVisible)refreshDisplays();}
     onPageChanged: {
-        wifiDevices.forEach(d => d.scannerEnabled = page === "settings");
+        updateScan();
+        if(page === "") {
+            if(displayPage !== "") {closing=true;openBackground.stop();headerEntrance.stop();sideEntrance.stop();backgroundExit.restart();sideExit.restart();finishClose.restart();}
+            return;
+        }
+        const wasClosed=displayPage === "";
+        finishClose.stop();backgroundExit.stop();sideExit.stop();closing=false;displayPage=page;
+        if(wasClosed) {backgroundOpacity=0;sideOffset=44;openBackground.restart();sideEntrance.restart();}
+        else {backgroundOpacity=1;sideOffset=0;}
+        if(page === "start") {titleOffset=25;titleOpacity=0;headerEntrance.restart();}
+        else {titleOffset=0;titleOpacity=1;}
+        transitionSerial++;
     }
+    function updateScan() {wifiDevices.forEach(d => d.scannerEnabled=page === "wifi" || (settingsVisible && settingsWindow.section === "network"));}
+    function refreshDisplays() {if(!validation && !displayProcess.running)displayProcess.running=true;}
+    function wallpaperUrl(value) {const path=value || Theme.data.wallpaper || "metro-blue.svg";return "file://"+(path.startsWith("/") ? path : home+"/.local/share/hypr-win8-dots/assets/wallpapers/"+path).split("/").map(encodeURIComponent).join("/");}
+    function iconUrl(name) {return "file://"+home+"/.local/share/hypr-win8-dots/assets/icons/"+name+".svg";}
+    function desktopKey(id) {return apps.find(a => a.id===id || a.id===id+".desktop")?.id || id;}
+    function isStartPinned(id) {return !!id && tiles.some(t => t.desktop && desktopKey(t.desktop)===desktopKey(id));}
+    function isTaskbarPinned(id) {return !!id && pinIds.some(i => desktopKey(i)===desktopKey(id));}
+    readonly property var pinnedApps:pinIds.map(id => apps.find(a => a.id===desktopKey(id))).filter(a => !!a)
+    function appForWindow(window) {return apps.find(a => a.id.toLowerCase()===window.appId.toLowerCase()+".desktop" || a.id.toLowerCase()===window.appId.toLowerCase()) || apps.find(a => a.id===DesktopEntries.heuristicLookup(window.appId)?.id) || null;}
+    function openSettings(section) {activeScreen=screenForFocus();page="";settingsWindow.section=section || "system";settingsVisible=true;settingsWindow.minimized=false;}
+    function toggleNight() {night=!night;exec(["hyprctl","hyprsunset",night ? "temperature" : "identity"].concat(night ? ["4000"] : []));}
+    function launchAndClose(args) {pendingLaunch=args;page="";appLaunchTimer.restart();}
+    NumberAnimation {id:openBackground;target:root;property:"backgroundOpacity";to:1;duration:100}
+    NumberAnimation {id:sideEntrance;target:root;property:"sideOffset";to:0;duration:220;easing.type:Easing.OutCubic}
+    NumberAnimation {id:sideExit;target:root;property:"sideOffset";to:44;duration:160;easing.type:Easing.InCubic}
+    SequentialAnimation {id:headerEntrance;PauseAnimation{duration:70} ParallelAnimation {
+        NumberAnimation{target:root;property:"titleOffset";to:0;duration:150;easing.type:Easing.BezierSpline;easing.bezierCurve:[.1,.9,.2,1,1,1]}
+        NumberAnimation{target:root;property:"titleOpacity";to:1;duration:150}
+    }}
+    SequentialAnimation {id:backgroundExit;PauseAnimation{duration:170} NumberAnimation{target:root;property:"backgroundOpacity";to:0;duration:60}}
+    Timer {id:finishClose;interval:230;onTriggered:{if(root.page === "")root.displayPage="";}}
+    Timer {id:appLaunchTimer;interval:150;onTriggered:{const command=root.pendingLaunch;root.pendingLaunch=[];if(command.length)root.launch(command);}}
+    SettingsWindow {id:settingsWindow;shell:root}
+    Connections {target:settingsWindow;function onSectionChanged(){root.updateScan();}}
     function cleanTitle(title) {return title.replace(/^[\u2800-\u28ff]\s/, "");}
     function exec(args) { Quickshell.execDetached(args); }
     function launch(args) {Quickshell.execDetached(["systemd-run","--user","--scope","--quiet","--collect"].concat(args));}
@@ -68,6 +114,7 @@ ShellRoot {
     }
     function screenForFocus() { return Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) || Quickshell.screens[0]; }
     function toggle(name) {
+        if(name === "control-panel") {openSettings();return;}
         if (name === "switcher" && page === name) { selectedWindow = (selectedWindow + 1) % Math.max(1,windows.length); return; }
         activeScreen = screenForFocus(); query = ""; pendingPower = ""; errorMessage = "";
         page = page === name ? "" : name;
@@ -76,13 +123,13 @@ ShellRoot {
         if (page === "displays") displayProcess.running = true;
     }
     function navigate(name) { page = ""; toggle(name); }
-    function launchApp(a) { backend("launch", [a.id]); page = ""; }
+    function launchApp(a) { launchAndClose(["python3",helper,"launch",a.id]); }
     function launchTile(t) {
-        if (t.action) { navigate(t.action); return; }
+        if (t.action) {if(t.action === "settings" || t.action === "control-panel")openSettings("personalization");else navigate(t.action);return;}
         if (t.live === "music") { if (player?.canTogglePlaying) player.togglePlaying(); return; }
         if (t.live === "network") { navigate("settings"); return; }
-        if (t.desktop) { backend("launch", [t.desktop]); page = ""; }
-        else if (t.command?.length) { launch(t.command); page = ""; }
+        if (t.desktop) { launchAndClose(["python3",helper,"launch",t.desktop]); }
+        else if (t.command?.length) { launchAndClose(t.command); }
     }
     function tileBody(t) {
         if (t.live === "clock") return Qt.formatDateTime(now,"HH:mm") + "\n" + Qt.formatDateTime(now,"dddd, d MMMM");
@@ -111,8 +158,11 @@ ShellRoot {
     IpcHandler {
         target: "metro"
         function toggle(page: string): void { root.toggle(page); }
-        function status(): string { return JSON.stringify({page:root.page,apps:root.apps.length,tiles:root.tiles.length,screens:Quickshell.screens.length,notifications:root.history.length,query:root.query,results:root.filteredApps.length,tray:SystemTray.items.values.length,monitor:root.activeScreen?.name,polkitRegistered:polkitLoader.item?.isRegistered || false,liveNotifications:root.liveNotifications.length,stats:root.stats}); }
+        function status(): string { return JSON.stringify({page:root.page,apps:root.apps.length,tiles:root.tiles.length,screens:Quickshell.screens.length,notifications:root.history.length,query:root.query,results:root.filteredApps.length,tray:SystemTray.items.values.length,monitor:root.activeScreen?.name,polkitRegistered:polkitLoader.item?.isRegistered || false,liveNotifications:root.liveNotifications.length,stats:root.stats,displayPage:root.displayPage,closing:root.closing,backgroundOpacity:root.backgroundOpacity,pins:root.pinIds,settingsVisible:root.settingsVisible,settingsSection:settingsWindow.section}); }
         function close(): void { root.page = ""; }
+        function settings(section: string): void {root.openSettings(section);}
+        function hideSettings(): void {root.settingsVisible=false;}
+        function pin(target: string, id: string): void {root.backend("pin",[target,id]);}
     }
     // Compatibility for preserved touchpad gestures.
     GlobalShortcut { name: "overviewWorkspacesToggle"; onPressed: root.toggle("workspaces") }
@@ -120,6 +170,11 @@ ShellRoot {
         path: (Quickshell.env("HYPR_WIN8_DATA") || root.home + "/.config/hypr-win8") + "/tiles.json"; watchChanges: true
         onFileChanged: reload()
         onLoaded: { try { root.tiles = JSON.parse(text()); } catch(e) { console.error("Tiles JSON: " + e); } }
+    }
+    FileView {
+        path:(Quickshell.env("HYPR_WIN8_DATA") || root.home+"/.config/hypr-win8")+"/pins.json";watchChanges:true
+        onFileChanged:reload()
+        onLoaded:{try{root.pinIds=JSON.parse(text()).taskbar || [];}catch(e){console.error("Pinned apps JSON: "+e);}}
     }
     Timer { interval:1000; running:!root.validation; repeat:true; onTriggered:root.now = new Date() }
     Process {
@@ -180,7 +235,13 @@ ShellRoot {
     }
     Timer {id:osdTimer;interval:1800;onTriggered:root.osdText=""}
     Timer {id:popupTimer; onTriggered:{let n=root.popup;root.popupId=-1;if(n && !n.resident)n.expire();}}
-    component BarButton: MetroButton { padding:4 }
+    component BarButton: MetroButton {
+        id:b
+        property bool truncate:false
+        padding:4
+        Layout.minimumWidth:implicitWidth;Layout.preferredWidth:implicitWidth;Layout.maximumWidth:implicitWidth
+        contentItem:Text {text:b.text;color:Theme.foreground;font:b.font;horizontalAlignment:Text.AlignHCenter;verticalAlignment:Text.AlignVCenter;elide:b.truncate ? Text.ElideRight : Text.ElideNone}
+    }
     component Label: Text { color:Theme.foreground; font.family:Theme.font; font.pixelSize:16; wrapMode:Text.Wrap; textFormat:Text.PlainText }
 
     Variants {
@@ -198,8 +259,8 @@ ShellRoot {
             Image {
                 anchors.fill:parent
                 sourceSize:Qt.size(width * wallpaperWindow.screen.devicePixelRatio,height * wallpaperWindow.screen.devicePixelRatio)
-                source: "file://" + ((Theme.data.wallpaper || "").startsWith("/") ? Theme.data.wallpaper : root.home + "/.local/share/hypr-win8-dots/assets/wallpapers/" + (Theme.data.wallpaper || "metro-blue.svg"))
-                fillMode:Image.PreserveAspectCrop; asynchronous:true
+                source:root.wallpaperUrl()
+                fillMode:Theme.data.wallpaperFit === "fit" ? Image.PreserveAspectFit : Theme.data.wallpaperFit === "stretch" ? Image.Stretch : Image.PreserveAspectCrop; asynchronous:true
             }
         }
     }
@@ -218,17 +279,19 @@ ShellRoot {
                     implicitWidth:64;implicitHeight:48;fill:Theme.accent
                     Image { sourceSize:Qt.size(width,height);anchors.centerIn:parent;width:26;height:26;source:"file://"+root.home+"/.local/share/hypr-win8-dots/assets/icons/start.svg"}
                     onClicked: {root.activeScreen=bar.screen;root.query="";root.page=root.page==="start" ? "" : "start";}
-                    ToolTip.visible:hovered;ToolTip.text:"Start · Super"
                 }
-                Repeater {
-                    model:root.tiles.filter(t => t.desktop).slice(0,4)
-                    BarButton {
+                ListView {
+                    Layout.minimumWidth:Math.min(root.pinnedApps.length*48,bar.width*.22)
+                    Layout.preferredWidth:Math.min(root.pinnedApps.length*48,bar.width*.22)
+                    Layout.maximumWidth:Math.min(root.pinnedApps.length*48,bar.width*.22)
+                    Layout.fillHeight:true;orientation:ListView.Horizontal;clip:true
+                    model:root.pinnedApps
+                    delegate:BarButton {
                         required property var modelData
-                        implicitWidth:48;implicitHeight:48
-                        fill:Theme.surface
-                        Image { sourceSize:Qt.size(width,height);anchors.centerIn:parent;width:24;height:24;source:Quickshell.iconPath(modelData.icon,"application-x-executable")}
-                        onClicked:root.launchTile(modelData)
-                        ToolTip.visible:hovered;ToolTip.text:modelData.name
+                        width:48;height:48;implicitWidth:48;fill:Theme.surface
+                        Image {sourceSize:Qt.size(24,24);anchors.centerIn:parent;width:24;height:24;source:Quickshell.iconPath(modelData.icon,"application-x-executable")}
+                        onClicked:root.launchApp(modelData)
+                        MouseArea {anchors.fill:parent;acceptedButtons:Qt.RightButton;onClicked:{barMenu.app=parent.modelData;barMenu.popup();}}
                     }
                 }
                 Rectangle {Layout.preferredWidth:1;Layout.preferredHeight:28;color:Theme.secondary;Layout.leftMargin:8;Layout.rightMargin:8}
@@ -238,7 +301,6 @@ ShellRoot {
                         required property var modelData
                         text:String(modelData.id);implicitWidth:32;implicitHeight:32;selected:modelData.active
                         fill:Theme.surface;onClicked:modelData.activate()
-                        ToolTip.visible:hovered;ToolTip.text:"Desktop " + modelData.id
                     }
                 }
                 ListView {
@@ -246,11 +308,11 @@ ShellRoot {
                     model:ToplevelManager.toplevels
                     delegate:BarButton {
                         required property var modelData
-                        width:Math.min(170,Math.max(70,bar.width/12));height:48;text:root.cleanTitle(modelData.title)
+                        truncate:true;width:Math.min(170,Math.max(70,bar.width/12));height:48;text:root.cleanTitle(modelData.title)
                         fill:modelData.activated ? Theme.secondary : Theme.surface
                         onClicked:modelData.activate()
+                        MouseArea {anchors.fill:parent;acceptedButtons:Qt.RightButton;onClicked:{barMenu.app=root.appForWindow(parent.modelData);barMenu.popup();}}
                         Rectangle {anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.right:parent.right;height:modelData.activated ? 3 : 1;color:Theme.accent}
-                        ToolTip.visible:hovered;ToolTip.text:root.cleanTitle(modelData.title)
                     }
                 }
                 Repeater {
@@ -262,65 +324,71 @@ ShellRoot {
                         Image { sourceSize:Qt.size(width,height);anchors.centerIn:parent;width:20;height:20;source:trayButton.modelData.icon}
                         onClicked: { if(modelData.onlyMenu && modelData.hasMenu) modelData.display(bar,bar.width-200,0);else modelData.activate(); }
                         MouseArea {anchors.fill:parent;acceptedButtons:Qt.RightButton;onClicked:trayButton.modelData.display(bar,bar.width-200,0)}
-                        ToolTip.visible:hovered;ToolTip.text:modelData.tooltipTitle || modelData.title
                     }
                 }
-                BarButton {text:root.networkName === "Offline" ? "⊘" : "⇄";implicitWidth:38;fill:Theme.surface;onClicked:root.toggle("settings");ToolTip.visible:hovered;ToolTip.text:root.networkName}
-                BarButton {text:root.sink?.audio?.muted ? "Mute" : Math.round((root.sink?.audio?.volume || 0)*100)+"%";implicitWidth:70;fill:Theme.surface;onClicked:root.toggle("settings")}
-                BarButton {visible:UPower.displayDevice.isLaptopBattery;text:Math.round(UPower.displayDevice.percentage*100)+"%";fill:Theme.surface;onClicked:root.toggle("settings")}
-                BarButton {text:"▤ " + root.history.length;implicitWidth:48;fill:Theme.surface;onClicked:root.toggle("notifications")}
-                BarButton {text:root.layout;implicitWidth:40;fill:Theme.surface;onClicked:root.exec(["hyprctl","switchxkblayout","all","next"])}
-                BarButton {id:clockButton;text:Qt.formatDateTime(root.now,"HH:mm\ndd.MM.yyyy");implicitWidth:102;implicitHeight:48;font.pixelSize:13;fill:Theme.surface;onClicked:root.toggle("start");contentItem:Text{text:clockButton.text;color:Theme.foreground;font:clockButton.font;horizontalAlignment:Text.AlignHCenter;verticalAlignment:Text.AlignVCenter}}
+                BarButton {implicitWidth:42;fill:Theme.surface;Image{anchors.centerIn:parent;width:24;height:24;source:root.iconUrl("network");sourceSize:Qt.size(24,24)} onClicked:root.toggle("wifi")}
+                BarButton {text:root.sink?.audio?.muted ? "Mute" : Math.round((root.sink?.audio?.volume || 0)*100)+"%";implicitWidth:76;fill:Theme.surface;onClicked:root.toggle("audio")}
+                BarButton {visible:UPower.displayDevice.isLaptopBattery;text:Math.round(UPower.displayDevice.percentage*100)+"%";implicitWidth:70;fill:Theme.surface;onClicked:root.toggle("settings")}
+                BarButton {implicitWidth:42;fill:Theme.surface;Image{anchors.centerIn:parent;width:24;height:24;source:root.iconUrl("notifications");sourceSize:Qt.size(24,24)} onClicked:root.toggle("notifications")}
+                BarButton {implicitWidth:42;fill:Theme.surface;Image{anchors.centerIn:parent;width:24;height:24;source:root.iconUrl("settings");sourceSize:Qt.size(24,24)} onClicked:root.toggle("settings")}
+                BarButton {text:root.layout;implicitWidth:44;fill:Theme.surface;onClicked:root.exec(["hyprctl","switchxkblayout","all","next"])}
+                BarButton {id:clockButton;text:Qt.formatDateTime(root.now,"HH:mm\ndd.MM.yyyy");implicitWidth:120;implicitHeight:48;font.pixelSize:13;fill:Theme.surface;onClicked:root.toggle("start")}
             }
+            AppMenu {id:barMenu;shell:root}
         }
     }
     LazyLoader {
-        active:!root.validation && root.page !== ""
+        active:!root.validation && root.displayPage !== ""
         component:PanelWindow {
         id: overlay
         screen:root.activeScreen
-        visible:!root.validation && root.page !== ""
+        visible:!root.validation && root.displayPage !== ""
         anchors {top:true;bottom:true;left:true;right:true}
         exclusionMode:ExclusionMode.Ignore
         WlrLayershell.namespace:"hypr-win8-overlay"
         WlrLayershell.layer:WlrLayer.Overlay
         WlrLayershell.keyboardFocus:root.page !== "" ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         color:"transparent"
-        property bool full:root.page === "start" || root.page === "apps" || root.page === "search" || root.page === "workspaces" || root.page === "switcher"
+        property bool full:root.displayPage === "start" || root.displayPage === "apps" || root.displayPage === "search" || root.displayPage === "workspaces" || root.displayPage === "switcher"
         MouseArea {anchors.fill:parent;onClicked:root.page=""}
         Rectangle {
             id: panel
             anchors.top:parent.top;anchors.bottom:parent.bottom;anchors.right:parent.right
             width:overlay.full ? parent.width : Math.min(440,parent.width)
-            color:Theme.background
-            Behavior on width {NumberAnimation {duration:160;easing.type:Easing.OutCubic}}
+            color:"transparent"
+            transform:Translate {x:overlay.full ? 0 : root.sideOffset}
+            Rectangle {anchors.fill:parent;color:Theme.background;opacity:root.backgroundOpacity}
+            enabled:!root.closing
             MouseArea {anchors.fill:parent}
             Item {
                 id: keyboard
                 anchors.fill:parent;focus:true
                 Keys.onPressed: event => {
                     if(event.key === Qt.Key_Escape) {root.page="";event.accepted=true;}
-                    else if(root.page === "switcher" && event.key === Qt.Key_Tab) {root.selectedWindow=(root.selectedWindow+1)%Math.max(1,root.windows.length);event.accepted=true;}
-                    else if(root.page === "switcher" && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {root.activateWindow();event.accepted=true;}
-                    else if(root.page === "start" && event.text.length && !(event.modifiers & (Qt.ControlModifier|Qt.AltModifier|Qt.MetaModifier))) {root.page="search";root.query=event.text;searchField.forceActiveFocus();event.accepted=true;}
+                    else if(root.displayPage === "switcher" && event.key === Qt.Key_Tab) {root.selectedWindow=(root.selectedWindow+1)%Math.max(1,root.windows.length);event.accepted=true;}
+                    else if(root.displayPage === "switcher" && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {root.activateWindow();event.accepted=true;}
+                    else if(root.displayPage === "start" && event.text.length && !(event.modifiers & (Qt.ControlModifier|Qt.AltModifier|Qt.MetaModifier))) {root.page="search";root.query=event.text;searchField.forceActiveFocus();event.accepted=true;}
                 }
-                Keys.onReleased: event => {if(root.page === "switcher" && event.key === Qt.Key_Alt) root.activateWindow();}
+                Keys.onReleased: event => {if(root.displayPage === "switcher" && event.key === Qt.Key_Alt) root.activateWindow();}
                 ColumnLayout {
                     anchors.fill:parent
                     anchors.margins:overlay.full ? Math.max(32,Math.min(100,panel.width*.05)) : 28
                     spacing:22
                     RowLayout {
                         Layout.fillWidth:true
-                        Label {text:root.page === "start" ? "Start" : root.page === "apps" ? "All apps" : root.page === "switcher" ? "Windows" : root.page.charAt(0).toUpperCase()+root.page.slice(1);font.pixelSize:overlay.full ? 52 : 36;font.weight:Font.Light;Layout.fillWidth:true}
+                        opacity:root.closing ? 0 : root.titleOpacity
+                        transform:Translate {x:root.titleOffset}
+                        Behavior on opacity {NumberAnimation {duration:root.closing ? 120 : 0}}
+                        Label {text:root.displayPage === "start" ? "Start" : root.displayPage === "apps" ? "All apps" : root.displayPage === "switcher" ? "Windows" : root.displayPage.charAt(0).toUpperCase()+root.displayPage.slice(1);font.pixelSize:overlay.full ? 52 : 36;font.weight:Font.Light;Layout.fillWidth:true}
                         MetroButton {text:"×";implicitWidth:44;fill:Theme.background;onClicked:root.page=""}
                     }
                     Label {visible:root.errorMessage.length>0;text:root.errorMessage;color:Theme.danger;Layout.fillWidth:true}
                     TextField {
                         id:searchField
-                        visible:["search","apps","clipboard"].includes(root.page)
+                        visible:["search","apps","clipboard"].includes(root.displayPage)
                         Layout.fillWidth:true;Layout.preferredHeight:48
                         text:root.query;onTextEdited:root.query=text
-                        placeholderText:root.page === "clipboard" ? "Search clipboard" : "Search apps, settings · > command"
+                        placeholderText:root.displayPage === "clipboard" ? "Search clipboard" : "Search apps, settings · > command"
                         color:Theme.foreground;placeholderTextColor:Theme.muted;font.family:Theme.font;font.pixelSize:18
                         background:Rectangle {color:Theme.surface;border.color:Theme.accent;border.width:2}
                         onAccepted: {
@@ -330,7 +398,7 @@ ShellRoot {
                         Keys.onEscapePressed:root.page=""
                     }
                     Flickable {
-                        visible:root.page === "start";Layout.fillWidth:true;Layout.fillHeight:true
+                        visible:root.displayPage === "start";Layout.fillWidth:true;Layout.fillHeight:true
                         contentWidth:tileRow.width;contentHeight:Math.max(height,tileRow.height);clip:true
                         ScrollBar.horizontal:ScrollBar {policy:ScrollBar.AsNeeded}
                         ScrollBar.vertical:ScrollBar {policy:ScrollBar.AsNeeded}
@@ -342,10 +410,38 @@ ShellRoot {
                                 Column {
                                     id:groupColumn
                                     required property string modelData
+                                    required property int index
+                                    property real slideOffset:80+Math.min(index,3)*30
+                                    property real tileOpacity:0
+                                    transform:Translate {x:slideOffset}
+                                    opacity:tileOpacity
                                     spacing:18
+                                    function enter() {exitAnimation.stop();tileOpacity=0;slideOffset=80+Math.min(index,3)*30;entrance.restart();}
+                                    Component.onCompleted:enter()
+                                    SequentialAnimation {
+                                        id:entrance
+                                        PauseAnimation {duration:80+Math.min(groupColumn.index,3)*15}
+                                        ParallelAnimation {
+                                            NumberAnimation {target:groupColumn;property:"slideOffset";to:0;duration:220-Math.min(groupColumn.index,3)*15;easing.type:Easing.BezierSpline;easing.bezierCurve:[.1,.9,.2,1,1,1]}
+                                            NumberAnimation {target:groupColumn;property:"tileOpacity";to:1;duration:190-Math.min(groupColumn.index,3)*15}
+                                        }
+                                    }
+                                    SequentialAnimation {
+                                        id:exitAnimation
+                                        PauseAnimation {duration:Math.min(3,Math.max(0,root.groups.length-1-groupColumn.index))*15}
+                                        ParallelAnimation {
+                                            NumberAnimation {target:groupColumn;property:"slideOffset";to:80;duration:145;easing.type:Easing.InCubic}
+                                            NumberAnimation {target:groupColumn;property:"tileOpacity";to:0;duration:145}
+                                        }
+                                    }
+                                    Connections {
+                                        target:root
+                                        function onClosingChanged(){if(root.closing){entrance.stop();exitAnimation.restart();}}
+                                        function onTransitionSerialChanged(){if(root.page === "start")groupColumn.enter();}
+                                    }
                                     Label {text:groupColumn.modelData;font.pixelSize:22;color:Theme.muted}
                                     Item {
-                                        width:4*tileRow.unit+30;height:4*tileRow.unit+30
+                                        width:4*tileRow.unit+30;height:Math.max(4,...root.tiles.filter(t => t.group===groupColumn.modelData).map(t => t.y+t.h))*(tileRow.unit+10)-10
                                         Repeater {
                                             model:root.tiles.filter(t => t.group === groupColumn.modelData && (t.live !== "battery" || UPower.displayDevice.isLaptopBattery))
                                             Rectangle {
@@ -355,8 +451,11 @@ ShellRoot {
                                                 width:modelData.w*tileRow.unit+(modelData.w-1)*10;height:modelData.h*tileRow.unit+(modelData.h-1)*10
                                                 color:tileMouse.containsMouse ? Qt.lighter(modelData.color,1.15) : modelData.color
                                                 border.width:tileMouse.containsMouse ? 2 : 0;border.color:"#bfffffff"
-                                                scale:tileMouse.pressed ? .97 : 1
-                                                Behavior on scale {NumberAnimation {duration:130}}
+                                                property bool pressFeedback:false
+                                                Item {
+                                                anchors.fill:parent;scale:tileMouse.pressed || tile.pressFeedback ? .96 : 1
+                                                Behavior on scale {NumberAnimation {duration:70}}
+
                                                 Image { sourceSize:Qt.size(width,height);visible:!tile.modelData.live && !root.zoomed;width:Math.min(60,tile.width*.4);height:width;anchors.centerIn:parent;source:Quickshell.iconPath(tile.modelData.icon || "preferences-system","application-x-executable")}
                                                 Label {
                                                     visible:!!tile.modelData.live;text:root.tileBody(tile.modelData);anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:18
@@ -364,7 +463,12 @@ ShellRoot {
                                                     maximumLineCount:4;elide:Text.ElideRight
                                                 }
                                                 Label {text:tile.modelData.name;anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom;maximumLineCount:1;elide:Text.ElideRight;anchors.margins:14;color:"white";font.pixelSize:root.zoomed ? 13 : 16}
-                                                MouseArea {id:tileMouse;anchors.fill:parent;hoverEnabled:true;onClicked:root.launchTile(tile.modelData)}
+                                                }
+                                                Timer {id:tileLaunch;interval:75;onTriggered:{tile.pressFeedback=false;root.launchTile(tile.modelData);}}
+                                                MouseArea {id:tileMouse;anchors.fill:parent;hoverEnabled:true;acceptedButtons:Qt.LeftButton|Qt.RightButton;onClicked:mouse => {
+                                                    if(mouse.button===Qt.RightButton){overlayMenu.app=root.apps.find(a => a.id===root.desktopKey(tile.modelData.desktop || "")) || null;overlayMenu.tile=tile.modelData;overlayMenu.popup();}
+                                                    else {tile.pressFeedback=true;tileLaunch.restart();}
+                                                }}
                                             }
                                         }
                                     }
@@ -373,15 +477,15 @@ ShellRoot {
                         }
                     }
                     RowLayout {
-                        visible:root.page === "start";Layout.fillWidth:true
+                        visible:root.displayPage === "start";Layout.fillWidth:true
                         MetroButton {text:"↓  All apps";onClicked:{root.page="apps";root.query="";searchField.forceActiveFocus();}}
                         MetroButton {text:root.zoomed ? "+  Expand" : "−  Groups";onClicked:root.zoomed=!root.zoomed}
                         Item {Layout.fillWidth:true}
-                        MetroButton {text:"Settings";onClicked:root.navigate("settings")}
+                        MetroButton {text:"Параметры";onClicked:root.openSettings("personalization")}
                         MetroButton {text:"Power";onClicked:root.navigate("power")}
                     }
                     GridView {
-                        visible:root.page === "apps" || root.page === "search";Layout.fillWidth:true;Layout.fillHeight:true
+                        visible:root.displayPage === "apps" || root.displayPage === "search";Layout.fillWidth:true;Layout.fillHeight:true
                         cellWidth:Math.max(220,Math.floor(width/Math.max(1,Math.floor(width/270))));cellHeight:76;clip:true
                         model:root.filteredApps
                         ScrollBar.vertical:ScrollBar {}
@@ -397,17 +501,18 @@ ShellRoot {
                                 }
                             }
                             onClicked:root.launchApp(modelData)
+                            MouseArea {anchors.fill:parent;acceptedButtons:Qt.RightButton;onClicked:{overlayMenu.app=parent.modelData;overlayMenu.popup();}}
                         }
                     }
                     RowLayout {
-                        visible:root.page === "search";Layout.fillWidth:true
+                        visible:root.displayPage === "search";Layout.fillWidth:true
                         Repeater {model:["Settings","Displays","Power","Clipboard"].filter(s => s.toLowerCase().includes(root.query.toLowerCase()))
                             MetroButton {required property string modelData;text:modelData;onClicked:root.navigate(modelData.toLowerCase())}
                         }
                         MetroButton {text:"Run command";visible:root.query.startsWith(">");onClicked:{root.launch(["bash","-lc",root.query.slice(1).trim()]);root.page="";}}
                     }
                     ListView {
-                        visible:root.page === "switcher";Layout.fillWidth:true;Layout.fillHeight:true;clip:true;spacing:12
+                        visible:root.displayPage === "switcher";Layout.fillWidth:true;Layout.fillHeight:true;clip:true;spacing:12
                         model:ToplevelManager.toplevels
                         delegate:MetroButton {
                             required property var modelData;required property int index
@@ -421,98 +526,62 @@ ShellRoot {
                         }
                     }
                     Flow {
-                        visible:root.page === "workspaces";Layout.fillWidth:true;Layout.fillHeight:true;spacing:16
+                        visible:root.displayPage === "workspaces";Layout.fillWidth:true;Layout.fillHeight:true;spacing:16
                         Repeater {
                             model:Hyprland.workspaces
                             MetroButton {required property var modelData;visible:modelData.id>0;text:"Desktop "+modelData.id+"\n"+(modelData.monitor?.name || "");width:200;height:128;selected:modelData.focused;onClicked:{modelData.activate();root.page="";}}
                         }
                     }
                     ColumnLayout {
-                        visible:root.page === "charms";Layout.fillWidth:true;spacing:12
+                        visible:root.displayPage === "charms";Layout.fillWidth:true;spacing:12
                         Repeater {model:["Search","Share","Start","Devices","Settings"]
                             MetroButton {required property string modelData;text:modelData;Layout.fillWidth:true;implicitHeight:72;fill:Theme.surface;onClicked:root.navigate(modelData.toLowerCase())}
                         }
                     }
                     ScrollView {
-                        visible:root.page === "settings";Layout.fillWidth:true;Layout.fillHeight:true;clip:true
+                        visible:root.displayPage === "settings";Layout.fillWidth:true;Layout.fillHeight:true;clip:true;contentWidth:availableWidth
                         ColumnLayout {
-                            width:parent.width;spacing:16
-                            Label {text:"Connection · "+root.networkName;Layout.fillWidth:true;color:Theme.muted}
-                            MetroButton {visible:root.wifiDevices.length>0;text:Networking.wifiEnabled ? "Wi-Fi  On" : "Wi-Fi  Off";Layout.fillWidth:true;selected:Networking.wifiEnabled;onClicked:Networking.wifiEnabled=!Networking.wifiEnabled}
-                            MetroButton {visible:root.wifiDevices.length>0;text:root.showNetworks ? "Hide Wi-Fi networks ↑" : "Wi-Fi networks ↓";Layout.fillWidth:true;onClicked:root.showNetworks=!root.showNetworks}
-                            Repeater {
-                                model:root.showNetworks ? root.wifiDevices : []
-                                ColumnLayout {
-                                    required property var modelData
-                                    Layout.fillWidth:true
-                                    Repeater {
-                                        model:modelData.networks
-                                        MetroButton {
-                                            required property var modelData
-                                            Layout.fillWidth:true;text:modelData.name+"  "+(modelData.connected ? "Connected" : Math.round(modelData.signalStrength*100)+"%")
-                                            onClicked: {
-                                                if(modelData.connected) modelData.disconnect();
-                                                else if(modelData.known) modelData.connect();
-                                                else { root.page="";root.launch(["kitty","-e","nmcli","--ask","device","wifi","connect",modelData.name]); }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            MetroButton {visible:!!root.adapter;text:root.adapter?.enabled ? "Bluetooth  On" : "Bluetooth  Off";selected:root.adapter?.enabled || false;Layout.fillWidth:true;onClicked:root.adapter.enabled=!root.adapter.enabled}
-                            MetroButton {visible:!!root.adapter && root.adapter.enabled;text:root.adapter?.discovering ? "Stop discovery" : "Discover devices";Layout.fillWidth:true;onClicked:root.adapter.discovering=!root.adapter.discovering}
-                            Repeater {
-                                model:root.adapter?.devices || []
-                                MetroButton {
-                                    required property var modelData
-                                    Layout.fillWidth:true;text:modelData.name+" · "+(modelData.connected ? "Connected" : modelData.paired ? "Paired" : "Available")
-                                    onClicked: {if(modelData.connected) modelData.disconnect();else if(modelData.paired) modelData.connect();else root.launch(["blueman-manager"]);}
-                                }
-                            }
-                            Label {text:"Volume · "+(root.sink?.nickname || root.sink?.description || "No output");Layout.fillWidth:true}
-                            Slider {
-                                Layout.fillWidth:true;from:0;to:1;value:root.sink?.audio?.volume || 0
-                                onMoved:root.exec(["wpctl","set-volume","@DEFAULT_AUDIO_SINK@",value.toFixed(2),"--limit","1"])
-                                background:Rectangle {x:parent.leftPadding;y:parent.topPadding+parent.availableHeight/2-2;width:parent.availableWidth;height:4;color:Theme.secondary;Rectangle{width:parent.width*parent.parent.visualPosition;height:4;color:Theme.accent}}
-                                handle:Rectangle {x:parent.leftPadding+parent.visualPosition*(parent.availableWidth-width);y:parent.topPadding+parent.availableHeight/2-10;width:12;height:20;color:Theme.accent}
-                            }
-                            MetroButton {text:root.sink?.audio?.muted ? "Unmute" : "Mute";Layout.fillWidth:true;onClicked:root.exec(["wpctl","set-mute","@DEFAULT_AUDIO_SINK@","toggle"])}
-                            Repeater {
-                                model:Pipewire.nodes.values.filter(n => n.isSink && !n.isStream && n.audio)
-                                MetroButton {required property var modelData;Layout.fillWidth:true;text:modelData.nickname || modelData.description;selected:modelData===root.sink;onClicked:root.exec(["wpctl","set-default",String(modelData.id)])}
-                            }
-                            Label {visible:root.stats.brightness !== null;text:"Brightness · "+root.stats.brightness+"%"}
-                            Slider {visible:root.stats.brightness !== null;Layout.fillWidth:true;from:1;to:100;value:root.stats.brightness || 50;onMoved:root.exec(["brightnessctl","set",Math.round(value)+"%"])}
-                            MetroButton {text:root.night ? "Night mode  On" : "Night mode  Off";Layout.fillWidth:true;selected:root.night;onClicked:{root.night=!root.night;root.exec(["hyprctl","hyprsunset",root.night ? "temperature" : "identity"].concat(root.night ? ["4000"] : []));}}
-                            MetroButton {text:root.dnd ? "Do not disturb  On" : "Do not disturb  Off";Layout.fillWidth:true;selected:root.dnd;onClicked:root.dnd=!root.dnd}
-                            MetroButton {text:Theme.light ? "Dark mode" : "Light mode";Layout.fillWidth:true;onClicked:root.backend("theme",[Theme.light ? "dark" : "light"])}
-                            Flow {Layout.fillWidth:true;spacing:8
-                                Repeater {model:["#0078d4","#008ba8","#7441a0","#b25417","#16865b","#c42b1c"]
-                                    MetroButton {required property string modelData;width:44;implicitWidth:44;fill:modelData;text:"";onClicked:root.backend("theme",[Theme.light ? "light" : "dark",modelData])}
-                                }
-                            }
-                            Label {text:"Wallpaper";color:Theme.muted}
+                            width:parent.width;spacing:18
                             RowLayout {
-                                Repeater {model:["blue","purple","green"]
-                                    MetroButton {required property string modelData;text:modelData;Layout.fillWidth:true;implicitWidth:80;onClicked:root.backend("theme",[Theme.light ? "light" : "dark",String(Theme.accent),"metro-"+modelData+".svg"])}
-                                }
+                                Layout.fillWidth:true;spacing:12
+                                ConnectivityTile {visible:root.wifiDevices.length>0;Layout.fillWidth:true;title:"Wi-Fi";subtitle:Networking.wifiEnabled ? root.networkName : "Выключен";icon:root.iconUrl("wifi");enabledRadio:Networking.wifiEnabled;onToggleRadio:Networking.wifiEnabled=!Networking.wifiEnabled;onOpenDetails:root.navigate("wifi")}
+                                ConnectivityTile {visible:!!root.adapter;Layout.fillWidth:true;title:"Bluetooth";subtitle:root.adapter?.enabled ? "Включён" : "Выключен";icon:root.iconUrl("bluetooth");enabledRadio:root.adapter?.enabled || false;onToggleRadio:root.adapter.enabled=!root.adapter.enabled;onOpenDetails:root.navigate("bluetooth")}
                             }
-                            MetroButton {text:"Displays";Layout.fillWidth:true;onClicked:root.navigate("displays")}
-                            MetroButton {text:"Power";Layout.fillWidth:true;onClicked:root.navigate("power")}
+                            AudioPane {shell:root;Layout.fillWidth:true}
+                            Label {visible:root.stats.brightness!==null;text:"Яркость · "+root.stats.brightness+"%"}
+                            Slider {visible:root.stats.brightness!==null;Layout.fillWidth:true;from:1;to:100;value:root.stats.brightness || 50;onMoved:root.exec(["brightnessctl","set",Math.round(value)+"%"])}
+                            RowLayout {Layout.fillWidth:true
+                                MetroButton {Layout.fillWidth:true;text:"Ночной свет";selected:root.night;onClicked:root.toggleNight()}
+                                MetroButton {Layout.fillWidth:true;text:"Не беспокоить";selected:root.dnd;onClicked:root.dnd=!root.dnd}
+                            }
+                            RowLayout {Layout.fillWidth:true
+                                MetroButton {Layout.fillWidth:true;text:"Экран";onClicked:root.navigate("displays")}
+                                MetroButton {Layout.fillWidth:true;text:"Питание";onClicked:root.navigate("power")}
+                            }
+                            MetroButton {text:"Все параметры ›";Layout.fillWidth:true;onClicked:root.openSettings()}
+                        }
+                    }
+                    ScrollView {
+                        visible:["wifi","bluetooth","audio"].includes(root.displayPage);Layout.fillWidth:true;Layout.fillHeight:true;clip:true;contentWidth:availableWidth
+                        ColumnLayout {
+                            width:parent.width;spacing:18
+                            MetroButton {text:"‹ Быстрые настройки";Layout.fillWidth:true;onClicked:root.navigate("settings")}
+                            Loader {Layout.fillWidth:true;active:root.displayPage === "wifi" || root.displayPage === "bluetooth";sourceComponent:NetworkList {shell:root;kind:root.displayPage}}
+                            Loader {Layout.fillWidth:true;active:root.displayPage === "audio";sourceComponent:AudioPane {shell:root;outputs:true}}
                         }
                     }
                     ColumnLayout {
-                        visible:root.page === "share" || root.page === "devices";Layout.fillWidth:true;spacing:12
-                        MetroButton {visible:root.page === "share";text:"Clipboard history";Layout.fillWidth:true;onClicked:root.navigate("clipboard")}
-                        MetroButton {visible:root.page === "share";text:"Capture region";Layout.fillWidth:true;onClicked:{root.page="";root.launch([root.home+"/.local/bin/hypr-win8-screenshot","region"]);}}
-                        MetroButton {visible:root.page === "share";text:"Open screenshots";Layout.fillWidth:true;onClicked:root.launch(["xdg-open",root.home+"/Pictures/Screenshots"])}
-                        MetroButton {visible:root.page === "devices";text:"Displays";Layout.fillWidth:true;onClicked:root.navigate("displays")}
-                        MetroButton {visible:root.page === "devices" && !!root.adapter;text:"Bluetooth devices";Layout.fillWidth:true;onClicked:root.launch(["blueman-manager"])}
-                        MetroButton {visible:root.page === "devices";text:"Audio outputs";Layout.fillWidth:true;onClicked:root.navigate("settings")}
-                        MetroButton {visible:root.page === "devices";text:"Storage devices";Layout.fillWidth:true;onClicked:root.launch(["nautilus","other-locations:///"])}
+                        visible:root.displayPage === "share" || root.displayPage === "devices";Layout.fillWidth:true;spacing:12
+                        MetroButton {visible:root.displayPage === "share";text:"Clipboard history";Layout.fillWidth:true;onClicked:root.navigate("clipboard")}
+                        MetroButton {visible:root.displayPage === "share";text:"Capture region";Layout.fillWidth:true;onClicked:{root.page="";root.launch([root.home+"/.local/bin/hypr-win8-screenshot","region"]);}}
+                        MetroButton {visible:root.displayPage === "share";text:"Open screenshots";Layout.fillWidth:true;onClicked:root.launch(["xdg-open",root.home+"/Pictures/Screenshots"])}
+                        MetroButton {visible:root.displayPage === "devices";text:"Displays";Layout.fillWidth:true;onClicked:root.navigate("displays")}
+                        MetroButton {visible:root.displayPage === "devices" && !!root.adapter;text:"Bluetooth devices";Layout.fillWidth:true;onClicked:root.navigate("bluetooth")}
+                        MetroButton {visible:root.displayPage === "devices";text:"Audio outputs";Layout.fillWidth:true;onClicked:root.navigate("audio")}
+                        MetroButton {visible:root.displayPage === "devices";text:"Storage devices";Layout.fillWidth:true;onClicked:root.launch(["nautilus","other-locations:///"])}
                     }
                     ListView {
-                        visible:root.page === "displays";Layout.fillWidth:true;Layout.fillHeight:true;spacing:20
+                        visible:root.displayPage === "displays";Layout.fillWidth:true;Layout.fillHeight:true;spacing:20
                         model:root.displays
                         delegate:ColumnLayout {
                             required property var modelData
@@ -527,12 +596,12 @@ ShellRoot {
                         }
                     }
                     ListView {
-                        visible:root.page === "clipboard";Layout.fillWidth:true;Layout.fillHeight:true;spacing:8;clip:true
+                        visible:root.displayPage === "clipboard";Layout.fillWidth:true;Layout.fillHeight:true;spacing:8;clip:true
                         model:root.clipboard.filter(c => c.text.toLowerCase().includes(root.query.toLowerCase()))
                         delegate:MetroButton {required property var modelData;width:ListView.view.width;height:56;text:modelData.text;onClicked:{root.backend("clipboard-copy",[modelData.id]);root.page="";}}
                     }
                     ListView {
-                        visible:root.page === "notifications";Layout.fillWidth:true;Layout.fillHeight:true;spacing:12;clip:true
+                        visible:root.displayPage === "notifications";Layout.fillWidth:true;Layout.fillHeight:true;spacing:12;clip:true
                         model:root.history
                         delegate:Rectangle {
                             id:noticeCard
@@ -551,20 +620,21 @@ ShellRoot {
                             }
                         }
                     }
-                    MetroButton {visible:root.page === "notifications";text:"Clear history";Layout.fillWidth:true;onClicked:root.clearHistory()}
+                    MetroButton {visible:root.displayPage === "notifications";text:"Clear history";Layout.fillWidth:true;onClicked:root.clearHistory()}
                     ColumnLayout {
-                        visible:root.page === "power";Layout.fillWidth:true;spacing:12
+                        visible:root.displayPage === "power";Layout.fillWidth:true;spacing:12
                         Repeater {model:[{name:"Lock",action:"lock"},{name:"Sleep",action:"sleep"},{name:"Restart",action:"restart"},{name:"Shutdown",action:"shutdown"},{name:"Logout",action:"logout"}]
                             MetroButton {required property var modelData;Layout.fillWidth:true;implicitHeight:58;text:root.pendingPower === modelData.action ? "Confirm "+modelData.name : modelData.name;fill:root.pendingPower === modelData.action ? Theme.danger : Theme.surface;onClicked:root.power(modelData.action)}
                         }
                     }
-                    Item {visible:["charms","share","devices","power"].includes(root.page);Layout.fillHeight:true}
+                    Item {visible:["charms","share","devices","power"].includes(root.displayPage);Layout.fillHeight:true}
                     Label {visible:!overlay.full;text:"Metro / Hyprland";color:Theme.muted;font.pixelSize:12}
                 }
             }
         }
+        AppMenu {id:overlayMenu;shell:root}
         function focusPage() {
-            if(["search","apps","clipboard"].includes(root.page)) searchField.forceActiveFocus();else keyboard.forceActiveFocus();
+            if(["search","apps","clipboard"].includes(root.displayPage)) searchField.forceActiveFocus();else keyboard.forceActiveFocus();
         }
         Component.onCompleted:Qt.callLater(focusPage)
         Connections {target:root;function onPageChanged(){Qt.callLater(overlay.focusPage);}}

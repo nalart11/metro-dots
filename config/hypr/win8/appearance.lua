@@ -15,4 +15,5 @@ hl.curve("metro",{type="bezier",points={{0.16,0.65},{0.25,1}}})
 for _, leaf in ipairs({"windowsIn","windowsOut","windowsMove","fadeIn","fadeOut","layersIn","layersOut","fadeLayersIn","fadeLayersOut","workspaces","specialWorkspaceIn","specialWorkspaceOut"}) do
     hl.animation({leaf=leaf,enabled=true,speed=1.8,bezier="metro",style=leaf=="workspaces" and "slide" or nil})
 end
-hl.layer_rule({match={namespace="hypr-win8-overlay"},animation="fade"})
+hl.layer_rule({match={namespace="^hypr-win8-overlay$"},no_anim=true})
+hl.window_rule({name="metro-settings-window",match={title="^Параметры — Metro$"},float=true})

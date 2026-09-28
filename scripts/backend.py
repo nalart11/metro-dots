@@ -79,6 +79,49 @@ def theme(mode=None,accent=None,wallpaper=None):
  if accent and os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
   import re
   if re.fullmatch(r'#[0-9a-fA-F]{6}',accent):call(['hyprctl','eval','hl.config({general={col={active_border="rgba('+accent[1:]+'ff)"}}})'])
+def wallpaper(value):
+ from urllib.parse import urlparse,unquote
+ if value.startswith('file:'):
+  url=urlparse(value)
+  if url.netloc not in ('','localhost'):raise ValueError('Only local images are supported')
+  value=unquote(url.path)
+ p=pathlib.Path(value).expanduser().resolve(strict=True)
+ if not p.is_file() or not os.access(p,os.R_OK):raise ValueError('Image file is not readable')
+ import gi
+ gi.require_version('GdkPixbuf','2.0')
+ from gi.repository import GdkPixbuf
+ info=GdkPixbuf.Pixbuf.get_file_info(str(p))
+ if not info[0] or info[1]<=0 or info[2]<=0:raise ValueError('Unsupported or invalid image')
+ tfile=H/'.config/hypr-win8/theme.json';t=json.loads(tfile.read_text())
+ t['wallpaper']=str(p);t['wallpaperHistory']=([str(p)]+[x for x in t.get('wallpaperHistory',[]) if x!=str(p)])[:9]
+ temp=tfile.with_suffix('.tmp');temp.write_text(json.dumps(t,ensure_ascii=False,indent=2)+'\n');temp.replace(tfile)
+ print(str(p))
+def theme_option(key,value):
+ if key!='wallpaperFit' or value not in ('fill','fit','stretch'):raise ValueError('Invalid theme option')
+ p=H/'.config/hypr-win8/theme.json';t=json.loads(p.read_text());t[key]=value
+ temp=p.with_suffix('.tmp');temp.write_text(json.dumps(t,ensure_ascii=False,indent=2)+'\n');temp.replace(p)
+def pin(target,identifier):
+ import fcntl
+ if target not in ('start','taskbar'):raise ValueError('Invalid pin target')
+ app=desktop_app(identifier);identifier=app.get_id();folder=H/'.config/hypr-win8'
+ def canonical(value):
+  try:return desktop_app(value).get_id()
+  except (TypeError,RuntimeError):return value
+ with open(folder/'pins.lock','w') as lock:
+  fcntl.flock(lock,fcntl.LOCK_EX)
+  path=folder/('tiles.json' if target=='start' else 'pins.json')
+  data=json.loads(path.read_text())
+  if target=='taskbar':
+   existing=data.get('taskbar',[])
+   if any(canonical(i)==identifier for i in existing):data['taskbar']=[i for i in existing if canonical(i)!=identifier]
+   else:data['taskbar']=existing+[identifier]
+  else:
+   if any(t.get('desktop') and canonical(t['desktop'])==identifier for t in data):data=[t for t in data if not (t.get('desktop') and canonical(t['desktop'])==identifier)]
+   else:
+    occupied={(x,y) for t in data if t['group']=='Pinned' for x in range(t['x'],t['x']+t['w']) for y in range(t['y'],t['y']+t['h'])}
+    slot=next(n for n in range(len(occupied)+1) if (n%4,n//4) not in occupied)
+    data.append({'name':app.get_display_name(),'desktop':identifier,'icon':app.get_string('Icon') or 'application-x-executable','w':1,'h':1,'color':'#0078d4','x':slot%4,'y':slot//4,'group':'Pinned'})
+  temp=path.with_suffix('.tmp');temp.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n');temp.replace(path)
 def displays():
  print(call(['hyprctl','monitors','-j'],capture_output=True,text=True).stdout)
 def scale(name,value):
@@ -114,6 +157,6 @@ def power(action):
 if __name__=='__main__':
  try:
   action=sys.argv[1];args=sys.argv[2:]
-  {'metrics':metrics,'apps-watch':apps_watch,'launch':launch,'inspect-entry':inspect_entry,'clipboard-list':clipboard_list,'clipboard-copy':clipboard_copy,'theme':theme,'displays':displays,'scale':scale,'power':power,'lock-status':lock_status,'lock-media':lock_media}[action](*args)
+  {'metrics':metrics,'apps-watch':apps_watch,'launch':launch,'inspect-entry':inspect_entry,'clipboard-list':clipboard_list,'clipboard-copy':clipboard_copy,'theme':theme,'wallpaper':wallpaper,'theme-option':theme_option,'pin':pin,'displays':displays,'scale':scale,'power':power,'lock-status':lock_status,'lock-media':lock_media}[action](*args)
  except Exception as e:
   print(str(e),file=sys.stderr);notify(str(e));sys.exit(1)

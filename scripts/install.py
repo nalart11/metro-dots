@@ -11,6 +11,7 @@ def planned():
  for folder in ['config/hypr/win8','config/quickshell/win8','config/systemd/user']:
   for p in sorted((R/folder).rglob('*')):
    if p.is_file():out.append('.'+str(p.relative_to(R)))
+ out+=['.local/share/applications/hypr-win8-settings.desktop','.config/hypr-win8/pins.json']
  out+=['.local/bin/'+n for n in SCRIPTS.values()]+['.local/bin/hypr-win8-rollback','.config/hypr-win8/installed','.config/hypr-win8/theme.json','.config/hypr-win8/tiles.json']
  return out
 def main():
@@ -29,7 +30,7 @@ def main():
   for parent in [p]+list(p.parents):
    if parent==H:break
    if parent.is_symlink():raise RuntimeError('Managed path crosses symlink; refusing install: '+str(parent))
- # Packages are deliberately a single explicit transaction after backup, before INSTALL.
+ # Package installation is a single explicit operation within INSTALL after validation.
  for cmd in ['quickshell','Hyprland','hyprlock']:
   if not shutil.which(cmd):raise RuntimeError('Validation prerequisite missing. Install explicitly before this transaction: sudo pacman -S --needed '+DEPENDENCIES[cmd])
  phase('BACKUP');s=snapshots.snapshot(a.kind)
@@ -53,7 +54,7 @@ def main():
   if 'require("win8.appearance")' not in original:raise RuntimeError('Unknown main config structure; refusing automatic migration')
  (stage/'hypr/hyprland.lua').write_text(original)
  run(['cp','-a',str(R/'config/quickshell/win8'),str(stage/'win8')]);(stage/'data').mkdir()
- for name in ['theme.json','tiles.json']:
+ for name in ['theme.json','tiles.json','pins.json']:
   src=H/'.config/hypr-win8'/name
   shutil.copy2(src if src.exists() else R/'defaults'/name,stage/'data'/name)
  # Repair only the generated stale default tile; retain other user tile edits.
@@ -91,13 +92,13 @@ def main():
   if alive:proc.terminate();proc.wait(timeout=5)
  qml=(stage/'qml-validation.log').read_text()
  if not alive or 'Configuration Loaded' not in qml or ' ERROR' in qml or 'ReferenceError' in qml or 'TypeError' in qml:raise RuntimeError('QML validation failed; see '+str(stage/'qml-validation.log'))
- files={'.config/hypr/hyprland.lua':stage/'hypr/hyprland.lua'}
+ files={'.config/hypr/hyprland.lua':stage/'hypr/hyprland.lua','.local/share/applications/hypr-win8-settings.desktop':R/'config/applications/hypr-win8-settings.desktop'}
  for folder in ['config/hypr/win8','config/quickshell/win8','config/systemd/user']:
   for p in (R/folder).rglob('*'):
    if p.is_file():files['.'+str(p.relative_to(R))]=p
  for src,dst in SCRIPTS.items():files['.local/bin/'+dst]=R/'scripts'/src
  files['.local/bin/hypr-win8-rollback']=R/'rollback.sh'
- for name in ['theme.json','tiles.json']:files['.config/hypr-win8/'+name]=stage/'data'/name
+ for name in ['theme.json','tiles.json','pins.json']:files['.config/hypr-win8/'+name]=stage/'data'/name
  marker=stage/'installed';marker.write_text(str(s)+'\n');files['.config/hypr-win8/installed']=marker
  snapshots.verify(s)
  (s/'installed.json').write_text(json.dumps({rel:snapshots.digest(p) for rel,p in files.items()},indent=2))

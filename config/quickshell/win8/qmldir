@@ -2,3 +2,8 @@ module Win8
 singleton Theme 1.0 Theme.qml
 
 MetroButton 1.0 MetroButton.qml
+AppMenu 1.0 AppMenu.qml
+AudioPane 1.0 AudioPane.qml
+ConnectivityTile 1.0 ConnectivityTile.qml
+NetworkList 1.0 NetworkList.qml
+SettingsWindow 1.0 SettingsWindow.qml

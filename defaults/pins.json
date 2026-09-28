@@ -1,0 +1,8 @@
+{
+  "taskbar": [
+    "firefox.desktop",
+    "org.gnome.Nautilus.desktop",
+    "kitty.desktop",
+    "codium.desktop"
+  ]
+}
