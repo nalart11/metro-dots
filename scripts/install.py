@@ -2,7 +2,7 @@
 import os,sys,pathlib,shutil,subprocess,datetime,json,hashlib,argparse,time,re
 import snapshot as snapshots
 H=pathlib.Path.home();R=pathlib.Path(__file__).resolve().parent.parent
-DEPENDENCIES={'quickshell':'quickshell','Hyprland':'hyprland','hyprlock':'hyprlock','hypridle':'hypridle','python3':'python','wl-copy':'wl-clipboard','wl-paste':'wl-clipboard','cliphist':'cliphist','grim':'grim','slurp':'slurp','wpctl':'wireplumber','nmcli':'networkmanager','notify-send':'libnotify','kitty':'kitty','hyprsunset':'hyprsunset'}
+DEPENDENCIES={'systemctl':'systemd','systemd-run':'systemd','quickshell':'quickshell','Hyprland':'hyprland','hyprlock':'hyprlock','hypridle':'hypridle','python3':'python','wl-copy':'wl-clipboard','wl-paste':'wl-clipboard','cliphist':'cliphist','grim':'grim','slurp':'slurp','wpctl':'wireplumber','nmcli':'networkmanager','notify-send':'libnotify','kitty':'kitty','hyprsunset':'hyprsunset'}
 SCRIPTS={'hypr-win8':'hypr-win8','backend.py':'hypr-win8-backend','screenshot':'hypr-win8-screenshot','shell-start':'hypr-win8-shell-start','session-start':'hypr-win8-session-start'}
 UNITS=['hypr-win8-shell.service','hypr-win8-clipboard-text.service','hypr-win8-clipboard-image.service']
 def run(args,**kw):return subprocess.run(args,check=True,**kw)
@@ -30,15 +30,17 @@ def main():
    if parent==H:break
    if parent.is_symlink():raise RuntimeError('Managed path crosses symlink; refusing install: '+str(parent))
  # Packages are deliberately a single explicit transaction after backup, before INSTALL.
+ for cmd in ['quickshell','Hyprland','hyprlock']:
+  if not shutil.which(cmd):raise RuntimeError('Validation prerequisite missing. Install explicitly before this transaction: sudo pacman -S --needed '+DEPENDENCIES[cmd])
  phase('BACKUP');s=snapshots.snapshot(a.kind)
  phase('VERIFY_BACKUP');snapshots.verify(s)
+ official=[]
  if missing:
   if a.no_packages:raise RuntimeError('Missing dependencies: '+', '.join(missing))
   official=[];aur=[]
   for p in missing:
    test=subprocess.run(['pacman','-Si',p],capture_output=True)
    (official if test.returncode==0 else aur).append(p)
-  if official:run(['sudo','pacman','-S','--needed']+official)
   if aur:raise RuntimeError('AUR dependency needed: '+', '.join(aur)+'. Existing helper: '+str(shutil.which('paru') or shutil.which('yay'))+'. Install explicitly and retry.')
  phase('GENERATE_CONFIG')
  stage=H/'.cache/hypr-win8-build'/datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S_%f');stage.mkdir(parents=True)
@@ -54,6 +56,12 @@ def main():
  for name in ['theme.json','tiles.json']:
   src=H/'.config/hypr-win8'/name
   shutil.copy2(src if src.exists() else R/'defaults'/name,stage/'data'/name)
+ # Repair only the generated stale default tile; retain other user tile edits.
+ tile_file=stage/'data/tiles.json';tile_data=json.loads(tile_file.read_text())
+ for tile in tile_data:
+  if tile.get('name')=='Code' and tile.get('desktop')=='dev.zed.Zed' and not (H/'.local/zed.app/bin/zed').exists() and shutil.which('codium'):
+   tile.update(desktop='codium',icon='vscodium');log.write('Migrated stale Zed default tile to installed VSCodium\n')
+ tile_file.write_text(json.dumps(tile_data,ensure_ascii=False,indent=2)+'\n')
  phase('VALIDATE_CONFIG')
  for p in R.rglob('*.sh'):run(['bash','-n',str(p)])
  for name in ['hypr-win8','screenshot','shell-start','session-start']:run(['bash','-n',str(R/'scripts'/name)])
@@ -67,6 +75,11 @@ def main():
     key=(t['group'],x,y)
     if key in occupied:raise RuntimeError('Overlapping tiles: '+t['name'])
     occupied[key]=t['name']
+ import resource
+ def no_core():resource.setrlimit(resource.RLIMIT_CORE,(0,0))
+ lock=subprocess.run(['hyprlock','-c',str(stage/'hypr/win8/hyprlock.conf'),'--display','hypr-win8-validation-no-server'],capture_output=True,text=True,preexec_fn=no_core,timeout=5)
+ (stage/'hyprlock-validation.log').write_text(lock.stdout+lock.stderr)
+ if 'Config has errors' in lock.stdout+lock.stderr or "Couldn't connect to a wayland compositor" not in lock.stdout+lock.stderr:raise RuntimeError('Hyprlock parse check failed: '+str(stage/'hyprlock-validation.log'))
  result=run(['Hyprland','--verify-config','-c',str(stage/'hypr/hyprland.lua')],capture_output=True,text=True)
  (stage/'hypr-validation.log').write_text(result.stdout+result.stderr)
  if 'Config parsing result:' not in result.stdout or result.stdout.split('Config parsing result:',1)[1].strip()!='config ok':raise RuntimeError('Hyprland validation failed; see '+str(stage/'hypr-validation.log'))
@@ -90,6 +103,7 @@ def main():
  (s/'installed.json').write_text(json.dumps({rel:snapshots.digest(p) for rel,p in files.items()},indent=2))
  phase('INSTALL')
  try:
+  if official:run(['sudo','pacman','-S','--needed']+official)
   for rel,src in files.items():
    dst=H/rel;dst.parent.mkdir(parents=True,exist_ok=True)
    # Copy to sibling first, then atomic replace. Existing dotfile is always in verified snapshot.

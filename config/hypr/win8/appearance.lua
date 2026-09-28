@@ -1,5 +1,11 @@
+local accent="0078d4"
+local file=io.open(os.getenv("HOME").."/.config/hypr-win8/theme.json","r")
+if file then
+    local text=file:read("*a");file:close()
+    accent=text:match('"accent"%s*:%s*"#(%x%x%x%x%x%x)"') or accent
+end
 hl.config({
-    general = {border_size=1, gaps_in=3, gaps_out=5, col={active_border="rgba(0078d4ff)",inactive_border="rgba(303849ff)"}},
+    general = {border_size=1, gaps_in=3, gaps_out=5, col={active_border="rgba("..accent.."ff)",inactive_border="rgba(303849ff)"}},
     decoration = {rounding=1, blur={enabled=false}, shadow={enabled=false}, dim_inactive=false},
     animations = {enabled=true},
     misc = {disable_hyprland_logo=true,disable_splash_rendering=true},

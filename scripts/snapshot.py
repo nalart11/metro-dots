@@ -71,6 +71,12 @@ def snapshot(kind='install'):
  for f in ['/tmp/hypr-win8-old-binds.json','/tmp/hypr-win8-monitors.json']:
   if pathlib.Path(f).exists():shutil.copy2(f,s/pathlib.Path(f).name)
  verify(s,True); (s/'VERIFIED').write_text(datetime.datetime.now().isoformat());print('SNAPSHOT='+str(s),flush=True);return s
+def known_managed():
+ out={}
+ for s in ROOT.iterdir():
+  if (s/'VERIFIED').exists() and (s/'installed.json').exists():
+   for r,h in json.loads((s/'installed.json').read_text()).items():out.setdefault(r,set()).add(h)
+ return out
 def restore(s,dry=False):
  s=s.resolve();verify(s)
  if not (s/'VERIFIED').exists():raise RuntimeError('Snapshot was not fully verified')
@@ -81,10 +87,10 @@ def restore(s,dry=False):
  current=snapshot('pre-rollback');q=current/'quarantine';q.mkdir()
  subprocess.run(['systemctl','--user','stop','hypr-win8-shell.service','hypr-win8-clipboard-text.service','hypr-win8-clipboard-image.service'],check=False)
  # Added files installed by this transaction are moved aside only if untouched.
- managed=json.loads((s/'installed.json').read_text()) if (s/'installed.json').exists() else {}
- for r,h in managed.items():
+ managed=known_managed()
+ for r,hashes in managed.items():
   p=H/r
-  if r not in meta and p.is_file() and not p.is_symlink() and digest(p)==h and r!='.local/bin/hypr-win8-rollback':
+  if r not in meta and p.is_file() and not p.is_symlink() and digest(p) in hashes and r!='.local/bin/hypr-win8-rollback':
    d=q/r;d.parent.mkdir(parents=True,exist_ok=True);p.rename(d)
  for r,v in sorted(meta.items(),key=lambda x:len(pathlib.Path(x[0]).parts)):
   p=H/r;src=s/'backup'/r
@@ -99,7 +105,9 @@ def restore(s,dry=False):
   else:run(['cp','-a','--remove-destination','--',str(src),str(p)])
  # Restore directory attributes after children.
  for r,v in sorted(meta.items(),key=lambda x:-len(pathlib.Path(x[0]).parts)):
-  if v['type']=='dir':shutil.copystat(s/'backup'/r,H/r,follow_symlinks=False)
+  if v['type']=='dir':
+   if (H/r).stat().st_uid==os.getuid():shutil.copystat(s/'backup'/r,H/r,follow_symlinks=False)
+   elif stat.S_IMODE((H/r).stat().st_mode)!=v['mode']:raise RuntimeError('Cannot restore permissions of non-owned directory: '+r)
  if inventory(H,info['saved']) != meta:
   # Extras are intentionally retained; compare all original entries.
   actual=inventory(H,info['saved'])
@@ -108,7 +116,7 @@ def restore(s,dry=False):
  if os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
   run(['hyprctl','reload'])
   subprocess.run(['pkill','-u',str(os.getuid()),'-x','hypridle'],check=False)
-  if (H/'.config/hypr-win8/installed').exists():
+  if 'require("win8.' in (H/'.config/hypr/hyprland.lua').read_text():
    subprocess.run(['systemctl','--user','start','hypr-win8-shell.service','hypr-win8-clipboard-text.service','hypr-win8-clipboard-image.service'],check=False)
    subprocess.Popen(['hypridle','-c',str(H/'.config/hypr/win8/hypridle.conf')],start_new_session=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
   else:

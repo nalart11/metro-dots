@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-exec python3 "$project_dir/scripts/install.py" "$@"
+exec python3 -B "$project_dir/scripts/install.py" "$@"

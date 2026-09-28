@@ -6,19 +6,23 @@ Metro desktop for this Arch Linux / Hyprland 0.55.4 Lua installation. Straight e
 
 ![Start Screen](docs/screenshots/start.png)
 
+![Quick Settings](docs/screenshots/settings.png)
+
+![Taskbar](docs/screenshots/taskbar.png)
+
 Screenshots are from the actual session. Wallpapers and the four-panel Start symbol are original procedural SVG designs. Application icons come from installed icon themes.
 
 ## Features
 
-Start, 1×1/2×1/2×2 tiles, live clock/system/network/music/calendar, All Apps, search, running windows, pinned apps, per-monitor workspaces, status notifier tray, Charms, PipeWire volume and output selection, NetworkManager Wi-Fi, BlueZ devices, notifications/history/DND, OSD, hyprlock, power confirmation, clipboard history and screenshots. Battery and backlight controls appear only when available. Optional weather and external calendars are intentionally absent: no accounts or unreliable scraping are assumed.
+Start, 1×1/2×1/2×2 tiles, live clock/system/network/music/calendar, All Apps, search, running windows, pinned apps, per-monitor workspaces, status notifier tray, Charms, PipeWire volume and output selection, NetworkManager Wi-Fi, BlueZ devices, notifications/history/DND, OSD, hyprlock, power confirmation, a native Polkit authentication dialog, clipboard history and screenshots. Battery and backlight controls appear only when available. Optional weather and external calendars are intentionally absent: no accounts or unreliable scraping are assumed.
 
 The switcher uses titles instead of compositor previews. Select a window, press Enter or release Alt. Super+Tab opens the workspace selector. Semantic zoom changes tile density with the Groups button. Wallpapers fill each monitor separately. Overlays select the focused monitor.
 
 ## Dependencies
 
-Already installed: Hyprland, Quickshell (this machine's 0.2.1 fork with `Quickshell.Networking`), Qt Quick Controls, Python, python-gobject, coreutils, kitty, hyprlock, hypridle, PipeWire/WirePlumber, NetworkManager, BlueZ, blueman, hyprsunset, brightnessctl, cliphist, wl-clipboard, grim, slurp, libnotify. Git maintains only this new project. Adwaita Sans is the installed open-source sans-serif font; theme.json can select Inter if installed.
+Already installed: Hyprland, Quickshell (this machine's 0.2.1 fork with `Quickshell.Networking`), Qt Quick Controls, Python, python-gobject, coreutils, kitty, hyprlock, hypridle, PipeWire/WirePlumber, NetworkManager, BlueZ, blueman, hyprsunset, brightnessctl, cliphist, wl-clipboard, grim, slurp, libnotify. Git maintains only this new project. The Code tile launches installed VSCodium. Adwaita Sans is the installed open-source sans-serif font; theme.json can select Inter if installed.
 
-No packages were needed for the initial deployment. The installer checks commands before package installation and uses one explicit `sudo pacman -S --needed` operation if official dependencies are missing. AUR installation is never implicit. This project targets the installed Lua include topology and refuses unknown main-config structures or managed symlink paths.
+No packages were needed for the initial deployment. The installer checks commands before package installation and uses one explicit `sudo pacman -S --needed` operation at the INSTALL stage if official dependencies are missing. Quickshell, Hyprland and hyprlock must already be installed for pre-install validation; missing validation prerequisites stop PRECHECK with an explicit package command. AUR installation is never implicit. This project targets the installed Lua include topology and refuses unknown main-config structures or managed symlink paths.
 
 ## Installation
 
@@ -29,7 +33,7 @@ cd ~/.local/share/hypr-win8-dots
 
 Stages: PRECHECK → BACKUP → VERIFY_BACKUP → GENERATE_CONFIG → VALIDATE_CONFIG → INSTALL → RELOAD → POSTCHECK. Generated configuration is validated in a new directory beneath `~/.cache/hypr-win8-build/`. Before INSTALL, existing dotfiles are untouched. After INSTALL, `--restore-on-error` restores the verified transaction snapshot automatically. Without that flag, an interactive terminal offers recovery and prints the standalone command. Packages, if needed, are outside the dotfile rollback; they are not automatically removed.
 
-The original Hyprland files remain in place. Only the main Lua entrypoint changes its shell autostart and final appearance include; a new `win8` module applies overrides. Original monitors, NVIDIA environment, input, custom rules and window/workspace binds remain included. Services are started by the session autostart hook, without modifying global system services or terminating the current session.
+The original Hyprland files remain in place. Only the main Lua entrypoint changes its shell autostart and final appearance include; a new `win8` module applies overrides. Original monitors, NVIDIA environment, input, custom rules and window/workspace binds remain included. Applications and the lockscreen launch in independent user scopes so restarting the UI preserves their processes. Services are started by the session autostart hook, without modifying global system services or terminating the current session.
 
 ## Dry run
 
@@ -60,7 +64,7 @@ Press Super or click the Start button. Start fills the active monitor. Type to s
 
 Each JSON tile contains `name`, `group`, `x`, `y`, `w`, `h`, `color` and optionally `icon`, `desktop`, `command` or `action`. Coordinates use grid units; supported sizes are 1×1, 2×1 and 2×2. `command` is an argument array, not a shell string. Desktop IDs use installed `.desktop` entries. `live` supports clock/system/network/music/calendar/battery. The installer rejects overlapping or unsupported tiles. Names, colors and layout are editable independently of the shell.
 
-Applications use the Quickshell desktop catalog for Name/Icon/NoDisplay/Categories/search and Gio.DesktopAppInfo for actual launching. Terminal entries launch through kitty with parsed desktop-field substitutions. Raw Exec strings are never passed to a shell. The explicit `> command` search mode runs a user-entered shell command.
+Applications use GioUnix.DesktopAppInfo for catalog and launching. GIO honors Name/Icon/NoDisplay/Hidden/OnlyShowIn/TryExec/Categories and monitors installed desktop entries for changes. Stale unavailable launchers are excluded. Quickshell supplies icon lookup for running windows. Terminal entries launch through kitty with parsed desktop-field substitutions. Raw Exec strings are never passed to a shell. The explicit `> command` search mode runs a user-entered shell command.
 
 ## Theme
 
@@ -71,7 +75,7 @@ Applications use the Quickshell desktop catalog for Name/Icon/NoDisplay/Categori
 | Old bind/action | New bind/action | Reason |
 | --- | --- | --- |
 | Super: old search | Super: Start | Full-screen launcher |
-| Super+C: editor | Super+C: Charms; Super+Shift+C: editor | Required Charms shortcut |
+| Super+C: editor | Super+C: Charms; Super+Alt+C: editor | Required Charms shortcut; preserve Super+Shift+C color picker |
 | Super+Q: close | Super+Q: Search; Alt+F4: close | Required search shortcut; conventional close |
 | Super+I: old settings | Super+I: Metro Settings | Unified controls |
 | Super+L: session lock | Super+L: hyprlock | Independent lockscreen |
@@ -114,7 +118,7 @@ A non-owned Kvantum directory cannot have its original UID/GID assigned to a use
 bash ~/.local/share/hypr-win8-backups/2026-09-28_18-25-33/restore.sh
 ```
 
-`restore.sh --dry-run` verifies without restoring. Actual recovery first makes a verified pre-rollback snapshot, stops Win8 services, copies original files without following target symlinks, restores modes/links and verifies original entries. User-added files remain. Newly installed, unchanged managed files are moved into the pre-rollback snapshot's quarantine; edited added files are retained. Directory conflicts and changed link types are quarantined. Backups are never removed. Original Quickshell, hypridle and clipboard watchers restart when a graphical session is running; from TTY the next session startup handles them.
+`restore.sh --dry-run` verifies without restoring. Actual recovery first makes a verified pre-rollback snapshot, stops Win8 services, copies original files without following target symlinks, restores modes/links and verifies original entries. User-added files remain. Newly installed, unchanged managed files (recognized across all installed project versions) are moved into the pre-rollback snapshot's quarantine; edited added files are retained. Directory conflicts and changed link types are quarantined. Backups are never removed. Original Quickshell, hypridle and clipboard watchers restart when a graphical session is running; from TTY the next session startup handles them.
 
 ## Recovery from broken Hyprland session
 
@@ -134,3 +138,7 @@ cd ~/.local/share/hypr-win8-dots
 ```
 
 Choose disable/quarantine Win8 files, restore the original configuration, or cancel. The first option restores the original main entrypoint and preserves current unrelated settings; only unchanged owned files are quarantined. Edited files, this Git project, recovery command and all backup snapshots remain. The second option runs complete rollback. User data and packages are never deleted automatically.
+
+## Validation
+
+See [acceptance report](docs/ACCEPTANCE.md) and machine-readable reports under docs/. The isolated recovery test is `python3 -B tests/restore.py`; it restores a disposable fixture home, never the live configuration.

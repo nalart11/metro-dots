@@ -1,0 +1,9 @@
+{
+  "firefox": "/usr/share/applications/firefox.desktop",
+  "org.gnome.Nautilus": "/usr/share/applications/org.gnome.Nautilus.desktop",
+  "kitty": "/usr/share/applications/kitty.desktop",
+  "codium": "/usr/share/applications/codium.desktop",
+  "org.prismlauncher.PrismLauncher": "/usr/share/applications/org.prismlauncher.PrismLauncher.desktop",
+  "steam": "/usr/share/applications/steam.desktop",
+  "org.telegram.desktop": "/usr/share/applications/org.telegram.desktop.desktop"
+}
