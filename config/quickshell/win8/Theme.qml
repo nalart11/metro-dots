@@ -6,12 +6,14 @@ Singleton {
     id: t
     property var data: ({})
     readonly property bool light: data.mode === "light"
-    readonly property color background: light ? "#edf0f4" : (data.background || "#171b26")
-    readonly property color surface: light ? "#ffffff" : (data.surface || "#222735")
-    readonly property color secondary: light ? "#dce2eb" : (data.surfaceSecondary || "#303849")
-    readonly property color accent: data.accent || "#0078d4"
-    readonly property color foreground: light ? "#172235" : (data.foreground || "#f5f6fa")
-    readonly property color muted: light ? "#526078" : (data.muted || "#aeb6c6")
+    readonly property var colors:data.palettes?.[light ? "light" : "dark"] || data
+    readonly property color onAccent:colors.onAccent || "white"
+    readonly property color background: colors.background || (light ? "#edf0f4" : "#171b26")
+    readonly property color surface: colors.surface || (light ? "#ffffff" : "#222735")
+    readonly property color secondary: colors.surfaceSecondary || (light ? "#dce2eb" : "#303849")
+    readonly property color accent: colors.accent || "#0078d4"
+    readonly property color foreground: colors.foreground || (light ? "#172235" : "#f5f6fa")
+    readonly property color muted: colors.muted || (light ? "#526078" : "#aeb6c6")
     readonly property color danger: data.danger || "#c42b1c"
     readonly property color success: data.success || "#16865b"
     readonly property string font: data.font || "Adwaita Sans"

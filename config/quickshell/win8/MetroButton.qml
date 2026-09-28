@@ -16,7 +16,7 @@ Button {
         Behavior on color { ColorAnimation { duration: 140 } }
     }
     contentItem: Text {
-        text: b.text; color: b.selected ? "white" : Theme.foreground
+        text:I18n.tr(b.text); color: b.selected || b.down ? Theme.onAccent : Theme.foreground
         font: b.font; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
     }

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Exercise persistent pins and image validation in a disposable home."""
-import importlib.util,json,pathlib,tempfile,urllib.parse,shutil
+import importlib.util,json,pathlib,tempfile,urllib.parse,shutil,sys
 root=pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(root/'scripts'))
 spec=importlib.util.spec_from_file_location('backend',root/'scripts/backend.py');backend=importlib.util.module_from_spec(spec);spec.loader.exec_module(backend)
 with tempfile.TemporaryDirectory(prefix='hypr-win8-personalization-') as tmp:
  backend.H=pathlib.Path(tmp);folder=backend.H/'.config/hypr-win8';folder.mkdir(parents=True)

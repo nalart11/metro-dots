@@ -7,3 +7,5 @@ AudioPane 1.0 AudioPane.qml
 ConnectivityTile 1.0 ConnectivityTile.qml
 NetworkList 1.0 NetworkList.qml
 SettingsWindow 1.0 SettingsWindow.qml
+singleton I18n 1.0 I18n.qml
+TileBoard 1.0 TileBoard.qml

@@ -15,20 +15,20 @@
   "Native notification server receives notifications": true,
   "Polkit agent registered": true,
   "All Apps indexed": true,
-  "14 tiles loaded": true,
+  "All configured tiles loaded": true,
   "System tray populated": true,
   "Screenshot saved and copied as PNG": true,
   "Clipboard UI opens": true,
   "hypr-win8-shell.service": true,
   "hypr-win8-clipboard-text.service": true,
   "hypr-win8-clipboard-image.service": true,
-  "idle_cpu_percent_one_core": 0.5,
+  "idle_cpu_percent_one_core": 0.6,
   "No QML errors or runtime type errors": true,
   "Expired notifications remain in safe history": true,
   "status": {
     "page": "",
     "apps": 113,
-    "tiles": 14,
+    "tiles": 15,
     "screens": 2,
     "notifications": 2,
     "query": "",
@@ -38,9 +38,9 @@
     "polkitRegistered": true,
     "liveNotifications": 0,
     "stats": {
-      "cpu": 6,
-      "ram": 34,
-      "temperature": 54,
+      "cpu": 10,
+      "ram": 53,
+      "temperature": 64,
       "brightness": null
     },
     "displayPage": "",
@@ -50,10 +50,15 @@
       "firefox.desktop",
       "org.gnome.Nautilus.desktop",
       "kitty.desktop",
-      "codium.desktop"
+      "codium.desktop",
+      "jetbrains-idea.desktop"
     ],
     "settingsVisible": false,
-    "settingsSection": "system"
+    "settingsSection": "system",
+    "language": "ru",
+    "autoPalette": true,
+    "accent": "#4ba1d8",
+    "editMode": false
   },
-  "timestamp": "2026-09-28 19:54:32"
+  "timestamp": "2026-09-28 20:51:45"
 }

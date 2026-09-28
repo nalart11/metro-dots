@@ -16,4 +16,4 @@ for _, leaf in ipairs({"windowsIn","windowsOut","windowsMove","fadeIn","fadeOut"
     hl.animation({leaf=leaf,enabled=true,speed=1.8,bezier="metro",style=leaf=="workspaces" and "slide" or nil})
 end
 hl.layer_rule({match={namespace="^hypr-win8-overlay$"},no_anim=true})
-hl.window_rule({name="metro-settings-window",match={title="^Параметры — Metro$"},float=true})
+hl.window_rule({name="metro-settings-window",match={title="^(Параметры|Settings) — Metro$"},float=true})

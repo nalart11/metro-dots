@@ -12,9 +12,17 @@ Menu {
         id:entry
         implicitHeight:42
         background:Rectangle {color:entry.highlighted ? Theme.accent : "transparent"}
-        contentItem:Text {text:entry.text;color:Theme.foreground;font.family:Theme.font;font.pixelSize:14;verticalAlignment:Text.AlignVCenter}
+        contentItem:Text {text:I18n.tr(entry.text);color:entry.highlighted ? Theme.onAccent : Theme.foreground;font.family:Theme.font;font.pixelSize:14;verticalAlignment:Text.AlignVCenter}
     }
-    Entry {text:"Открыть";enabled:!!menu.app;onTriggered:menu.shell.launchApp(menu.app)}
-    Entry {text:menu.shell.isStartPinned(menu.app?.id || "") ? "Открепить от Пуска" : "Закрепить на Пуске";enabled:!!menu.app;onTriggered:menu.shell.backend("pin",["start",menu.app.id])}
-    Entry {text:menu.shell.isTaskbarPinned(menu.app?.id || "") ? "Открепить от панели задач" : "Закрепить на панели задач";enabled:!!menu.app;onTriggered:menu.shell.backend("pin",["taskbar",menu.app.id])}
+    Entry {text:I18n.tr("Открыть");enabled:!!menu.app;onTriggered:menu.shell.launchApp(menu.app)}
+    Entry {text:I18n.tr(menu.shell.isStartPinned(menu.app?.id || "") ? "Открепить от Пуска" : "Закрепить на Пуске");enabled:!!menu.app;onTriggered:menu.shell.backend("pin",["start",menu.app.id])}
+    Entry {text:I18n.tr(menu.shell.isTaskbarPinned(menu.app?.id || "") ? "Открепить от панели задач" : "Закрепить на панели задач");enabled:!!menu.app;onTriggered:menu.shell.backend("pin",["taskbar",menu.app.id])}
+    Repeater {
+        model:menu.tile?.id ? [[1,1],[2,1],[1,2],[2,2]] : []
+        Entry {
+            required property var modelData
+            text:modelData[0]+" × "+modelData[1]
+            onTriggered:menu.shell.backend("tile-edit",[menu.tile.id,String(Math.min(menu.tile.x,4-modelData[0])),String(menu.tile.y),String(modelData[0]),String(modelData[1]),menu.tile.group])
+        }
+    }
 }

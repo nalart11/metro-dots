@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os,sys,json,time,pathlib,subprocess,shutil,shlex
+import hypr_win8_palette as palette
 H=pathlib.Path.home()
 def call(args,**kw):return subprocess.run(args,check=True,**kw)
 def notify(text):subprocess.run(['notify-send','-a','Metro',text],check=False)
@@ -70,16 +71,7 @@ def clipboard_list():
 def clipboard_copy(identifier):
  if not identifier.isdigit():raise ValueError('Invalid clipboard id')
  p=call(['cliphist','decode'],input=identifier.encode(),capture_output=True);call(['wl-copy'],input=p.stdout)
-def theme(mode=None,accent=None,wallpaper=None):
- p=H/'.config/hypr-win8/theme.json';t=json.loads(p.read_text())
- if mode:t['mode']=('light' if t.get('mode')=='dark' else 'dark') if mode=='toggle' else mode
- if accent:t['accent']=accent
- if wallpaper:t['wallpaper']=wallpaper
- tmp=p.with_suffix('.tmp');tmp.write_text(json.dumps(t,indent=2));tmp.replace(p)
- if accent and os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
-  import re
-  if re.fullmatch(r'#[0-9a-fA-F]{6}',accent):call(['hyprctl','eval','hl.config({general={col={active_border="rgba('+accent[1:]+'ff)"}}})'])
-def wallpaper(value):
+def image_path(value):
  from urllib.parse import urlparse,unquote
  if value.startswith('file:'):
   url=urlparse(value)
@@ -87,19 +79,79 @@ def wallpaper(value):
   value=unquote(url.path)
  p=pathlib.Path(value).expanduser().resolve(strict=True)
  if not p.is_file() or not os.access(p,os.R_OK):raise ValueError('Image file is not readable')
- import gi
- gi.require_version('GdkPixbuf','2.0')
- from gi.repository import GdkPixbuf
- info=GdkPixbuf.Pixbuf.get_file_info(str(p))
- if not info[0] or info[1]<=0 or info[2]<=0:raise ValueError('Unsupported or invalid image')
- tfile=H/'.config/hypr-win8/theme.json';t=json.loads(tfile.read_text())
- t['wallpaper']=str(p);t['wallpaperHistory']=([str(p)]+[x for x in t.get('wallpaperHistory',[]) if x!=str(p)])[:9]
- temp=tfile.with_suffix('.tmp');temp.write_text(json.dumps(t,ensure_ascii=False,indent=2)+'\n');temp.replace(tfile)
+ # Decoding validates the selected image, including SVG and EXIF-oriented photos.
+ try:palette.sample(p)
+ except Exception as e:raise ValueError("Unsupported or invalid image") from e
+ return p
+def theme(mode=None,accent=None,wallpaper=None):
+ t=json.loads((H/'.config/hypr-win8/theme.json').read_text());t=palette.prepare(t)
+ if mode:t['mode']=('light' if t.get('mode')=='dark' else 'dark') if mode=='toggle' else mode
+ if accent:
+  for value in t['palettes'].values():value['accent']=accent;value['onAccent']=palette.text_on(accent)
+  t['autoPalette']=False
+ if wallpaper:return globals()['wallpaper'](wallpaper)
+ palette.apply(t,H)
+def wallpaper(value,target='desktop'):
+ p=image_path(value);t=json.loads((H/'.config/hypr-win8/theme.json').read_text())
+ if target=='desktop':
+  t['wallpaper']=str(p);t['wallpaperHistory']=([str(p)]+[x for x in t.get('wallpaperHistory',[]) if x!=str(p)])[:9]
+  t=palette.prepare(t,p);palette.apply(t,H)
+ elif target=='lock':
+  palette.lock_image(p,H/'.config/hypr-win8/lock-wallpaper.png');t['lockWallpaper']=str(p)
+  palette.atomic(H/'.config/hypr-win8/theme.json',json.dumps(t,ensure_ascii=False,indent=2)+'\n');palette.record(H,['.config/hypr-win8/lock-wallpaper.png','.config/hypr-win8/theme.json'])
+ else:raise ValueError('Unknown wallpaper target')
  print(str(p))
+def custom_color(role,value):
+ t=json.loads((H/'.config/hypr-win8/theme.json').read_text());palette.apply(palette.custom(t,role,value),H)
 def theme_option(key,value):
- if key!='wallpaperFit' or value not in ('fill','fit','stretch'):raise ValueError('Invalid theme option')
- p=H/'.config/hypr-win8/theme.json';t=json.loads(p.read_text());t[key]=value
- temp=p.with_suffix('.tmp');temp.write_text(json.dumps(t,ensure_ascii=False,indent=2)+'\n');temp.replace(p)
+ p=H/'.config/hypr-win8/theme.json';t=json.loads(p.read_text())
+ if key=='wallpaperFit' and value in ('fill','fit','stretch'):t[key]=value
+ elif key=='autoPalette' and value in ('true','false'):
+  t[key]=value=='true'
+  if t[key]:
+   path=t.get('wallpaper','metro-blue.svg');path=path if path.startswith('/') else str(H/'.local/share/hypr-win8-dots/assets/wallpapers'/path)
+   t=palette.prepare(t,path)
+ else:raise ValueError('Invalid theme option')
+ palette.apply(t,H)
+def language(code):
+ languages={'ru':'ru_RU.UTF-8','en':'en_US.UTF-8'}
+ if code not in languages:raise ValueError('Unsupported interface language')
+ t=json.loads((H/'.config/hypr-win8/theme.json').read_text());t['language']=code
+ palette.atomic(H/'.config/hypr-win8/theme.json',json.dumps(t,ensure_ascii=False,indent=2)+'\n')
+ locale=languages[code];rel='.config/environment.d/60-hypr-win8-locale.conf'
+ palette.atomic(H/rel,'# HYPR-WIN8 GENERATED LOCALE\nLANG='+locale+'\nLC_MESSAGES='+locale+'\nLANGUAGE='+code+'\n');palette.record(H,[rel,'.config/hypr-win8/theme.json'])
+ lock=H/'.config/hypr/win8/hyprlock.conf'
+ if lock.exists():
+  import re
+  text=lock.read_text();text=re.sub(r'(?m)^    placeholder_text = .*$', '    placeholder_text = '+('Пароль' if code=='ru' else 'Password'),text);text=re.sub(r'(?m)^    fail_text = .*$', '    fail_text = '+('Ошибка аутентификации' if code=='ru' else 'Authentication failed'),text)
+  palette.atomic(lock,text);palette.record(H,['.config/hypr/win8/hyprlock.conf'])
+ if H==pathlib.Path.home():
+  values=['LANG='+locale,'LC_MESSAGES='+locale,'LANGUAGE='+code]
+  call(['systemctl','--user','set-environment']+values)
+  call(['dbus-update-activation-environment']+values)
+  if os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):call(['hyprctl','eval','hl.env("LANG",'+json.dumps(locale)+');hl.env("LC_MESSAGES",'+json.dumps(locale)+');hl.env("LANGUAGE",'+json.dumps(code)+')'])
+def tile_edit(identifier,x,y,w,h,group):
+ import fcntl
+ x,y,w,h=map(int,(x,y,w,h))
+ if (w,h) not in ((1,1),(2,1),(1,2),(2,2)) or not 0<=x<=4-w or not 0<=y<=127:raise ValueError('Invalid tile geometry')
+ path=H/'.config/hypr-win8/tiles.json'
+ with open(path.parent/'pins.lock','w') as lock:
+  fcntl.flock(lock,fcntl.LOCK_EX);tiles=json.loads(path.read_text());tile=next(t for t in tiles if t.get('id')==identifier)
+  if group not in {t['group'] for t in tiles}:raise ValueError('Unknown tile group')
+  old_x,old_y=tile['x'],tile['y'];tile.update(x=x,y=y,w=w,h=h,group=group)
+  def cells(t):return {(a,b) for a in range(t['x'],t['x']+t['w']) for b in range(t['y'],t['y']+t['h'])}
+  occupied=cells(tile)
+  for other in tiles:
+   if other is tile or other['group']!=group:continue
+   if occupied & cells(other):
+    candidates=[(a,b) for b in range(128) for a in range(5-other['w'])]
+    candidates.sort(key=lambda p:(abs(p[0]-old_x)+abs(p[1]-old_y),p[1],p[0]))
+    for a,b in candidates:
+     trial=dict(other,x=a,y=b)
+     if not occupied & cells(trial):other.update(x=a,y=b);break
+    else:raise ValueError('No space for tile')
+   occupied|=cells(other)
+  palette.atomic(path,json.dumps(tiles,ensure_ascii=False,indent=2)+'\n');palette.record(H,['.config/hypr-win8/tiles.json'])
 def pin(target,identifier):
  import fcntl
  if target not in ('start','taskbar'):raise ValueError('Invalid pin target')
@@ -120,7 +172,7 @@ def pin(target,identifier):
    else:
     occupied={(x,y) for t in data if t['group']=='Pinned' for x in range(t['x'],t['x']+t['w']) for y in range(t['y'],t['y']+t['h'])}
     slot=next(n for n in range(len(occupied)+1) if (n%4,n//4) not in occupied)
-    data.append({'name':app.get_display_name(),'desktop':identifier,'icon':app.get_string('Icon') or 'application-x-executable','w':1,'h':1,'color':'#0078d4','x':slot%4,'y':slot//4,'group':'Pinned'})
+    data.append({'id':'app-'+identifier,'name':app.get_display_name(),'desktop':identifier,'icon':app.get_string('Icon') or 'application-x-executable','w':1,'h':1,'color':'#0078d4','x':slot%4,'y':slot//4,'group':'Pinned'})
   temp=path.with_suffix('.tmp');temp.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n');temp.replace(path)
 def displays():
  print(call(['hyprctl','monitors','-j'],capture_output=True,text=True).stdout)
@@ -157,6 +209,10 @@ def power(action):
 if __name__=='__main__':
  try:
   action=sys.argv[1];args=sys.argv[2:]
-  {'metrics':metrics,'apps-watch':apps_watch,'launch':launch,'inspect-entry':inspect_entry,'clipboard-list':clipboard_list,'clipboard-copy':clipboard_copy,'theme':theme,'wallpaper':wallpaper,'theme-option':theme_option,'pin':pin,'displays':displays,'scale':scale,'power':power,'lock-status':lock_status,'lock-media':lock_media}[action](*args)
+  appearance_lock=None
+  if action in ('theme','custom-color','language','wallpaper','theme-option'):
+   import fcntl
+   appearance_lock=open(H/'.config/hypr-win8/appearance.lock','w');fcntl.flock(appearance_lock,fcntl.LOCK_EX)
+  {'metrics':metrics,'apps-watch':apps_watch,'launch':launch,'inspect-entry':inspect_entry,'clipboard-list':clipboard_list,'clipboard-copy':clipboard_copy,'theme':theme,'custom-color':custom_color,'language':language,'tile-edit':tile_edit,'wallpaper':wallpaper,'theme-option':theme_option,'pin':pin,'displays':displays,'scale':scale,'power':power,'lock-status':lock_status,'lock-media':lock_media}[action](*args)
  except Exception as e:
   print(str(e),file=sys.stderr);notify(str(e));sys.exit(1)

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 import os,sys,pathlib,shutil,subprocess,datetime,json,hashlib,argparse,time,re
 import snapshot as snapshots
+import hypr_win8_palette as palette
 H=pathlib.Path.home();R=pathlib.Path(__file__).resolve().parent.parent
 DEPENDENCIES={'systemctl':'systemd','systemd-run':'systemd','quickshell':'quickshell','Hyprland':'hyprland','hyprlock':'hyprlock','hypridle':'hypridle','python3':'python','wl-copy':'wl-clipboard','wl-paste':'wl-clipboard','cliphist':'cliphist','grim':'grim','slurp':'slurp','wpctl':'wireplumber','nmcli':'networkmanager','notify-send':'libnotify','kitty':'kitty','hyprsunset':'hyprsunset'}
-SCRIPTS={'hypr-win8':'hypr-win8','backend.py':'hypr-win8-backend','screenshot':'hypr-win8-screenshot','shell-start':'hypr-win8-shell-start','session-start':'hypr-win8-session-start'}
+SCRIPTS={'hypr-win8':'hypr-win8','backend.py':'hypr-win8-backend','hypr_win8_palette.py':'hypr_win8_palette.py','screenshot':'hypr-win8-screenshot','shell-start':'hypr-win8-shell-start','session-start':'hypr-win8-session-start'}
 UNITS=['hypr-win8-shell.service','hypr-win8-clipboard-text.service','hypr-win8-clipboard-image.service']
 def run(args,**kw):return subprocess.run(args,check=True,**kw)
 def planned():
- out=['.config/hypr/hyprland.lua']
+ out=['.config/hypr/hyprland.lua','.config/gtk-3.0/gtk.css','.config/gtk-4.0/gtk.css','.config/kitty/kitty.conf','.config/hypr-win8/kitty-colors.conf','.config/hypr-win8/lock-wallpaper.png','.config/environment.d/60-hypr-win8-locale.conf']
  for folder in ['config/hypr/win8','config/quickshell/win8','config/systemd/user']:
   for p in sorted((R/folder).rglob('*')):
    if p.is_file():out.append('.'+str(p.relative_to(R)))
@@ -60,17 +61,35 @@ def main():
  # Repair only the generated stale default tile; retain other user tile edits.
  tile_file=stage/'data/tiles.json';tile_data=json.loads(tile_file.read_text())
  for tile in tile_data:
+  if 'id' not in tile:tile['id']='tile-'+hashlib.sha256((tile.get('name','')+'|'+tile.get('desktop','')+'|'+tile.get('live','')).encode()).hexdigest()[:14]
   if tile.get('name')=='Code' and tile.get('desktop')=='dev.zed.Zed' and not (H/'.local/zed.app/bin/zed').exists() and shutil.which('codium'):
    tile.update(desktop='codium',icon='vscodium');log.write('Migrated stale Zed default tile to installed VSCodium\n')
  tile_file.write_text(json.dumps(tile_data,ensure_ascii=False,indent=2)+'\n')
+ theme_path=stage/'data/theme.json';theme=json.loads(theme_path.read_text());wall=theme.get('wallpaper','metro-blue.svg');wall=pathlib.Path(wall) if wall.startswith('/') else R/'assets/wallpapers'/wall
+ theme=palette.prepare(theme,wall);theme_path.write_text(json.dumps(theme,ensure_ascii=False,indent=2)+'\n')
+ generated={}
+ for rel,text in palette.outputs(theme,H).items():
+  dest=stage/'generated'/rel;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_text(text)
+  if (H/rel).exists():shutil.copymode(H/rel,dest)
+  generated[rel]=dest
+ lock_image=stage/'generated/lock-wallpaper.png';current_lock=H/'.config/hypr-win8/lock-wallpaper.png'
+ if current_lock.exists():shutil.copy2(current_lock,lock_image)
+ else:palette.lock_image(theme.get('lockWallpaper') or wall,lock_image)
+ generated['.config/hypr-win8/lock-wallpaper.png']=lock_image
+ lang=theme.get('language','ru');locale={'ru':'ru_RU.UTF-8','en':'en_US.UTF-8'}[lang];locale_file=stage/'generated/locale.conf';locale_file.write_text('# HYPR-WIN8 GENERATED LOCALE\nLANG='+locale+'\nLC_MESSAGES='+locale+'\nLANGUAGE='+lang+'\n');generated['.config/environment.d/60-hypr-win8-locale.conf']=locale_file
  phase('VALIDATE_CONFIG')
+ for version in (3,4):
+  # Parse the new CSS separately; existing user imports remain byte-for-byte.
+  css=stage/('metro-gtk'+str(version)+'.css');css.write_text(palette.css(theme,version==4))
+  check="import gi;gi.require_version('Gtk', '"+str(version)+".0');from gi.repository import Gtk;p=Gtk.CssProvider();errors=[];p.connect('parsing-error',lambda provider,section,error:errors.append(str(error)));p.load_from_path("+repr(str(css))+");assert not errors,errors"
+  run(['python3','-c',check])
  for p in R.rglob('*.sh'):run(['bash','-n',str(p)])
  for name in ['hypr-win8','screenshot','shell-start','session-start']:run(['bash','-n',str(R/'scripts'/name)])
  for p in (stage/'data').glob('*.json'):json.loads(p.read_text())
  tiles=json.loads((stage/'data/tiles.json').read_text())
  occupied={}
  for t in tiles:
-  if (t['w'],t['h']) not in [(1,1),(2,1),(2,2)]:raise RuntimeError('Unsupported tile size: '+t['name'])
+  if (t['w'],t['h']) not in [(1,1),(2,1),(1,2),(2,2)]:raise RuntimeError('Unsupported tile size: '+t['name'])
   for x in range(t['x'],t['x']+t['w']):
    for y in range(t['y'],t['y']+t['h']):
     key=(t['group'],x,y)
@@ -93,6 +112,7 @@ def main():
  qml=(stage/'qml-validation.log').read_text()
  if not alive or 'Configuration Loaded' not in qml or ' ERROR' in qml or 'ReferenceError' in qml or 'TypeError' in qml:raise RuntimeError('QML validation failed; see '+str(stage/'qml-validation.log'))
  files={'.config/hypr/hyprland.lua':stage/'hypr/hyprland.lua','.local/share/applications/hypr-win8-settings.desktop':R/'config/applications/hypr-win8-settings.desktop'}
+ files.update(generated)
  for folder in ['config/hypr/win8','config/quickshell/win8','config/systemd/user']:
   for p in (R/folder).rglob('*'):
    if p.is_file():files['.'+str(p.relative_to(R))]=p
@@ -116,7 +136,10 @@ def main():
   for line in listing.splitlines():
    if 'wl-paste --type ' in line and 'cliphistService update' in line and not 'ps -' in line:
     pid=int(line.split()[0]);os.kill(pid,15)
+  (H/'.local/state/hypr-win8/last-install-snapshot').write_text(str(s)+'\n')
   phase('RELOAD');run(['hyprctl','reload'])
+  palette.runtime(theme,H)
+  run(['python3',str(H/'.local/bin/hypr-win8-backend'),'language',lang])
   run(['systemctl','--user','import-environment','WAYLAND_DISPLAY','HYPRLAND_INSTANCE_SIGNATURE','XDG_CURRENT_DESKTOP','DISPLAY'])
   run(['systemctl','--user','restart']+UNITS)
   # Replace the old idle daemon with the dedicated config, retaining the no-auto-lock policy.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os,sys,json,hashlib,stat,subprocess,datetime,pathlib,shutil
 H=pathlib.Path.home(); ROOT=H/'.local/share/hypr-win8-backups'
-CONFIGS='hypr waybar rofi quickshell ags kitty foot alacritty dunst mako swaync wlogout hyprpaper swww gtk-3.0 gtk-4.0 Kvantum fish systemd/user illogical-impulse end4-pC matugen qt5ct qt6ct fontconfig xdg-desktop-portal hypr-win8'.split()
+CONFIGS='hypr waybar rofi quickshell ags kitty foot alacritty dunst mako swaync wlogout hyprpaper swww gtk-3.0 gtk-4.0 Kvantum fish systemd/user illogical-impulse end4-pC matugen qt5ct qt6ct fontconfig xdg-desktop-portal hypr-win8 environment.d'.split()
 PATHS=['.config/'+s for s in CONFIGS]+['.local/share/'+s for s in ['themes','icons','fonts','applications']]+['.local/bin','.zshrc','.bashrc','.profile','.xprofile']
 def run(args,**kw):return subprocess.run(args,check=True,**kw)
 def digest(p):
@@ -54,7 +54,7 @@ def snapshot(kind='install'):
   dst=s/'backup'/r;dst.parent.mkdir(parents=True,exist_ok=True)
   run(['cp','-a','--',str(H/r),str(dst)])
  (s/'inventory.json').write_text(json.dumps(original,ensure_ascii=False,indent=2))
- (s/'paths.json').write_text(json.dumps({'saved':rs,'absent':[p for p in PATHS if not os.path.lexists(H/p)],'home':str(H),'kind':kind},indent=2))
+ (s/'paths.json').write_text(json.dumps({'saved':rs,'absent':[p for p in PATHS if not os.path.lexists(H/p)],'home':str(H),'kind':kind,'locale_env':{k:os.environ.get(k,'') for k in ('LANG','LC_MESSAGES','LANGUAGE')}},indent=2))
  (s/'manifest.txt').write_text('Snapshot type: '+kind+'\nHome: '+str(H)+'\n\nSaved paths:\n'+'\n'.join(rs)+'\n\nAll saved entries:\n'+'\n'.join(sorted(original))+'\n')
  sums=''
  for r,v in sorted(original.items()):
@@ -76,6 +76,8 @@ def known_managed():
  for s in ROOT.iterdir():
   if (s/'VERIFIED').exists() and (s/'installed.json').exists():
    for r,h in json.loads((s/'installed.json').read_text()).items():out.setdefault(r,set()).add(h)
+  if (s/'VERIFIED').exists() and (s/'runtime-managed.json').exists():
+   for r,hashes in json.loads((s/'runtime-managed.json').read_text()).items():out.setdefault(r,set()).update(hashes)
  return out
 def restore(s,dry=False):
  s=s.resolve();verify(s)
@@ -113,8 +115,37 @@ def restore(s,dry=False):
   actual=inventory(H,info['saved'])
   if any({k:x for k,x in actual.get(r,{}).items() if k not in ('uid','gid')}!={k:x for k,x in v.items() if k not in ('uid','gid')} for r,v in meta.items()):raise RuntimeError('Restoration verification failed')
  subprocess.run(['systemctl','--user','daemon-reload'],check=False)
+ if H==pathlib.Path.home():
+  locale_file=H/'.config/environment.d/60-hypr-win8-locale.conf'
+  defaults=info.get('locale_env',{})
+  if not defaults:
+   for line in pathlib.Path('/etc/locale.conf').read_text().splitlines():
+    if line.startswith('LANG='):defaults={'LANG':line.split('=',1)[1].strip('"')}
+  if locale_file.exists():defaults.update(dict(line.split('=',1) for line in locale_file.read_text().splitlines() if line.startswith(('LANG=','LC_MESSAGES=','LANGUAGE='))))
+  lang=defaults.get('LANG') or 'C.UTF-8';values=['LANG='+lang,'LC_MESSAGES='+(defaults.get('LC_MESSAGES') or lang),'LANGUAGE='+(defaults.get('LANGUAGE') or lang.split('_')[0])]
+  subprocess.run(['systemctl','--user','set-environment']+values,check=False)
+  if shutil.which('dbus-update-activation-environment'):subprocess.run(['dbus-update-activation-environment']+values,check=False)
+  runtime=pathlib.Path(os.environ.get('XDG_RUNTIME_DIR','/run/user/'+str(os.getuid())))
+  # Reapply only Kitty color declarations from restored includes, never commands.
+  color_lines=[];visited=set()
+  def kitty_colors(file):
+   if file in visited or not file.is_file():return
+   visited.add(file)
+   for line in file.read_text().splitlines():
+    if line.startswith('include '):
+     child=line.split(None,1)[1].strip();child=pathlib.Path(os.path.expandvars(child)).expanduser();kitty_colors(child if child.is_absolute() else file.parent/child)
+    elif line.split(' ',1)[0] in ('background','foreground','cursor','cursor_text_color','selection_background','selection_foreground','active_tab_background','active_tab_foreground','inactive_tab_background','inactive_tab_foreground') or line.split(' ',1)[0].removeprefix('color').isdigit():color_lines.append(line)
+  kitty_colors(H/'.config/kitty/kitty.conf')
+  import tempfile
+  with tempfile.NamedTemporaryFile(mode='w',suffix='.conf') as colors:
+   colors.write('\n'.join(color_lines)+'\n');colors.flush()
+   for sock in runtime.glob('kitty-*'):
+    if sock.is_socket():
+     try:subprocess.run(['kitty','@','--to','unix:'+str(sock),'set-colors','--all','--configured',colors.name],capture_output=True,timeout=3)
+     except subprocess.TimeoutExpired:pass
  if os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
   run(['hyprctl','reload'])
+  if H==pathlib.Path.home():subprocess.run(['hyprctl','eval',';'.join('hl.env('+json.dumps(v.split('=',1)[0])+','+json.dumps(v.split('=',1)[1])+')' for v in values)],capture_output=True)
   subprocess.run(['pkill','-u',str(os.getuid()),'-x','hypridle'],check=False)
   if 'require("win8.' in (H/'.config/hypr/hyprland.lua').read_text():
    subprocess.run(['systemctl','--user','start','hypr-win8-shell.service','hypr-win8-clipboard-text.service','hypr-win8-clipboard-image.service'],check=False)

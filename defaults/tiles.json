@@ -9,7 +9,8 @@
     "x": 0,
     "y": 0,
     "group": "Daily",
-    "action": ""
+    "action": "",
+    "id": "tile-1d043239dd9f6d"
   },
   {
     "name": "Files",
@@ -21,7 +22,8 @@
     "x": 2,
     "y": 0,
     "group": "Daily",
-    "action": ""
+    "action": "",
+    "id": "tile-e2033f9139bfb2"
   },
   {
     "name": "Terminal",
@@ -33,7 +35,8 @@
     "x": 3,
     "y": 0,
     "group": "Daily",
-    "action": ""
+    "action": "",
+    "id": "tile-99caf53e81d7b8"
   },
   {
     "name": "Code",
@@ -45,7 +48,8 @@
     "x": 2,
     "y": 1,
     "group": "Daily",
-    "action": ""
+    "action": "",
+    "id": "tile-2f55e7c19698c0"
   },
   {
     "name": "Minecraft",
@@ -57,7 +61,8 @@
     "x": 0,
     "y": 2,
     "group": "Daily",
-    "action": ""
+    "action": "",
+    "id": "tile-5e7a1cc8434aa4"
   },
   {
     "name": "Steam",
@@ -69,7 +74,8 @@
     "x": 2,
     "y": 2,
     "group": "Daily",
-    "action": ""
+    "action": "",
+    "id": "tile-116403dd8ecf3c"
   },
   {
     "name": "Telegram",
@@ -81,7 +87,8 @@
     "x": 0,
     "y": 3,
     "group": "Daily",
-    "action": ""
+    "action": "",
+    "id": "tile-1a34d4b1bb6cf2"
   },
   {
     "name": "Settings",
@@ -93,7 +100,8 @@
     "x": 2,
     "y": 3,
     "group": "Daily",
-    "action": "settings"
+    "action": "settings",
+    "id": "tile-99bb2463a3f027"
   },
   {
     "name": "Clock",
@@ -104,7 +112,8 @@
     "x": 0,
     "y": 0,
     "group": "Live",
-    "icon": ""
+    "icon": "",
+    "id": "tile-04ea41e68a4da6"
   },
   {
     "name": "System",
@@ -115,7 +124,8 @@
     "x": 2,
     "y": 0,
     "group": "Live",
-    "icon": ""
+    "icon": "",
+    "id": "tile-e4cdd744618946"
   },
   {
     "name": "Network",
@@ -126,7 +136,8 @@
     "x": 2,
     "y": 1,
     "group": "Live",
-    "icon": ""
+    "icon": "",
+    "id": "tile-d7eeb711dda2bd"
   },
   {
     "name": "Music",
@@ -137,7 +148,8 @@
     "x": 0,
     "y": 2,
     "group": "Live",
-    "icon": ""
+    "icon": "",
+    "id": "tile-bf4420c817e10c"
   },
   {
     "name": "Calendar",
@@ -148,7 +160,8 @@
     "x": 2,
     "y": 2,
     "group": "Live",
-    "icon": ""
+    "icon": "",
+    "id": "tile-ee539bd1ff0cd2"
   },
   {
     "name": "Battery",
@@ -159,6 +172,7 @@
     "x": 0,
     "y": 3,
     "group": "Live",
-    "icon": ""
+    "icon": "",
+    "id": "tile-72a88f28810a50"
   }
 ]
