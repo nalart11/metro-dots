@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+out="$HOME/Pictures/Screenshots"
+mkdir -p "$out"
+file="$out/Metro-$(date +%Y-%m-%d_%H-%M-%S-%N).png"
+if [[ ${1:-region} == region ]]; then
+    geometry=$(slurp) || exit 0
+    grim -g "$geometry" "$file"
+else
+    monitor=$(hyprctl monitors -j | python3 -c 'import sys,json;print(next(m["name"] for m in json.load(sys.stdin) if m["focused"]))')
+    grim -o "$monitor" "$file"
+fi
+wl-copy --type image/png < "$file"
+notify-send -a Metro -i "$file" 'Screenshot saved and copied' "$file"

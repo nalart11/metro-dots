@@ -1,0 +1,12 @@
+[Unit]
+Description=Metro desktop shell for Hyprland
+PartOf=graphical-session.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+[Service]
+ExecStart=%h/.local/bin/hypr-win8-shell-start
+Restart=on-failure
+RestartSec=3
+Environment=QT_QUICK_CONTROLS_STYLE=Basic
+[Install]
+WantedBy=graphical-session.target

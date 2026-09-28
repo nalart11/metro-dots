@@ -1,0 +1,6 @@
+{
+  "mode": "dark", "background": "#171b26", "surface": "#222735",
+  "surfaceSecondary": "#303849", "accent": "#0078d4", "foreground": "#f5f6fa",
+  "muted": "#aeb6c6", "danger": "#c42b1c", "success": "#16865b",
+  "font": "Adwaita Sans", "wallpaper": "metro-blue.svg"
+}

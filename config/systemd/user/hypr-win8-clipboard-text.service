@@ -1,0 +1,7 @@
+[Unit]
+Description=Metro clipboard history (text)
+PartOf=graphical-session.target
+[Service]
+ExecStart=/usr/bin/wl-paste --type text --watch cliphist store
+Restart=on-failure
+RestartSec=3

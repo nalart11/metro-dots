@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP DISPLAY
+systemctl --user start hypr-win8-shell.service hypr-win8-clipboard-text.service hypr-win8-clipboard-image.service

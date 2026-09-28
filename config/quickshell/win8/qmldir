@@ -1,0 +1,4 @@
+module Win8
+singleton Theme 1.0 Theme.qml
+
+MetroButton 1.0 MetroButton.qml

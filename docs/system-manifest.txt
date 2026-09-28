@@ -1,0 +1,55 @@
+Original desktop: Hyprland 0.55.4 (Lua); Quickshell end4-pC; native Quickshell wallpaper/notifications/launcher/audio/network; hyprlock fallback; hypridle (automatic lock/suspend disabled); kitty; cliphist via wl-paste; hyprsunset; PipeWire/WirePlumber; NetworkManager/BlueZ.
+
+Hyprland includes:
+/home/nalart11/.config/hypr/hyprland.lua:4:require("custom.monitors")
+/home/nalart11/.config/hypr/hyprland.lua:7:require("hyprland.lib")
+/home/nalart11/.config/hypr/hyprland.lua:8:require("hyprland.services")
+/home/nalart11/.config/hypr/hyprland.lua:11:require("hyprland.env")
+/home/nalart11/.config/hypr/hyprland.lua:13:    require("custom.env")
+/home/nalart11/.config/hypr/hyprland.lua:17:require("hyprland.execs")
+/home/nalart11/.config/hypr/hyprland.lua:18:require("hyprland.general")
+/home/nalart11/.config/hypr/hyprland.lua:19:require("hyprland.rules")
+/home/nalart11/.config/hypr/hyprland.lua:20:require("hyprland.colors")
+/home/nalart11/.config/hypr/hyprland.lua:21:require("hyprland.keybinds")
+/home/nalart11/.config/hypr/hyprland.lua:25:    require("custom.execs")
+/home/nalart11/.config/hypr/hyprland.lua:28:    require("custom.general")
+/home/nalart11/.config/hypr/hyprland.lua:31:    require("custom.rules")
+/home/nalart11/.config/hypr/hyprland.lua:34:    require("custom.keybinds")
+/home/nalart11/.config/hypr/hyprland.lua:39:    require("workspaces")
+/home/nalart11/.config/hypr/hyprland.lua:42:    require("monitors")
+/home/nalart11/.config/hypr/hyprland.lua:46:require("hyprland.shellOverrides.main")
+/home/nalart11/.config/hypr/hyprland/services/create_custom_config.lua:1:require("hyprland/lib")
+/home/nalart11/.config/hypr/hyprland/services/init.lua:1:require("hyprland/services/create_custom_config")
+/home/nalart11/.config/hypr/hyprland/keybinds.lua:1:require("hyprland.lib")
+/home/nalart11/.config/hypr/hyprland/keybinds.lua:2:require("hyprland.variables")
+/home/nalart11/.config/hypr/hyprland/keybinds.lua:4:    require("custom.variables")
+/home/nalart11/.config/hypr/hyprland/keybinds.lua:107:-- (requires a running ollama model)
+
+Backup roots:
+.bashrc
+.zshrc
+.config/Kvantum
+.config/end4-pC
+.config/fish
+.config/fontconfig
+.config/foot
+.config/gtk-3.0
+.config/gtk-4.0
+.config/hypr
+.config/illogical-impulse
+.config/kitty
+.config/matugen
+.config/qt5ct
+.config/qt6ct
+.config/quickshell
+.config/rofi
+.config/swaync
+.config/wlogout
+.config/xdg-desktop-portal
+.local/bin
+ii-vynx/setup-ii-vynx.sh
+.config/systemd/user
+.local/share/applications
+.local/share/fonts
+.local/share/icons
+.local/lib/throne-gtk/throne-gtk

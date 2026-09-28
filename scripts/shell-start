@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p "$HOME/.local/state/hypr-win8"
+exec quickshell -c win8 --no-color --log-times >> "$HOME/.local/state/hypr-win8/shell.log" 2>&1
