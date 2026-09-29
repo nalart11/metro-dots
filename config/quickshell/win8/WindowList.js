@@ -29,3 +29,9 @@ function reconcile(previous, current, selectedIndex, appendNew) {
     const retained = next.findIndex(window => window.address === selectedAddress);
     return { windows: next, selected: retained >= 0 ? retained : Math.max(0, Math.min(selectedIndex, next.length - 1)) };
 }
+
+function mru(values) {
+    return values.filter(isMapped).slice().sort((a, b) =>
+        Number(!!b.activated) - Number(!!a.activated)
+        || (a.lastIpcObject.focusHistoryID ?? 999) - (b.lastIpcObject.focusHistoryID ?? 999));
+}

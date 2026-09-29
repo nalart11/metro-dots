@@ -1,0 +1,14 @@
+[Unit]
+Description=Metro lock screen at Hyprland session startup
+PartOf=graphical-session.target
+StartLimitIntervalSec=30
+StartLimitBurst=3
+[Service]
+Type=exec
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/hypr-win8
+ExecStart=/usr/bin/hyprlock --grace 0 --immediate-render --no-fade-in -c %h/.config/hypr/win8/hyprlock.conf
+Restart=on-failure
+RestartSec=2
+UMask=0077
+StandardOutput=append:%h/.local/state/hypr-win8/lock.log
+StandardError=append:%h/.local/state/hypr-win8/lock.log

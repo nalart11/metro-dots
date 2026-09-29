@@ -50,6 +50,9 @@ ShellRoot {
     property int selectedWindow: 0
     property int selectedWorkspace:0
     property var switchOrder:[]
+    property bool switcherReady:false
+    property var shiftKeys:[]
+    readonly property real chromeOpacity:closing || appsTransition ? 0 : titleOpacity
     property var activeScreen: Quickshell.screens[0] || null
     property var stats: ({cpu:0, ram:0, temperature:null, brightness:null})
     property var tiles: []
@@ -86,22 +89,27 @@ ShellRoot {
         if(page === "switcher" && !switchOrder.length)page="";
     }
     readonly property var workspaceOrder:Hyprland.workspaces.values.filter(w => w.id>0).slice().sort((a,b) => a.id-b.id)
+    readonly property var workspaceCards:workspaceOrder.concat([{id:Math.max(0,...workspaceOrder.map(w => w.id))+1,monitor:Hyprland.focusedMonitor,empty:true}])
+    function screenForMonitor(name){return Quickshell.screens.find(s => s.name === name) || activeScreen || Quickshell.screens[0];}
     function windowAppId(w){return w.wayland?.appId || w.lastIpcObject.class || "";}
     function focusWindow(w){const live=windows.find(item => item.address === w?.address && WindowList.isMapped(item));if(live){page="";backend("window-focus",[live.address]);}}
+    function moveWindow(w,id){if(w?.address){backend("window-move",[w.address,String(id)]);}}
     function focusWorkspace(w){if(w){page="";backend("workspace-focus",[String(w.id)]);}}
-    function stepSwitch(amount){if(page === "switcher")selectedWindow=(selectedWindow+amount+Math.max(1,switchOrder.length))%Math.max(1,switchOrder.length);else if(page === "workspaces")selectedWorkspace=(selectedWorkspace+amount+Math.max(1,workspaceOrder.length))%Math.max(1,workspaceOrder.length);}
-    function acceptSwitch(){if(page === "switcher")focusWindow(switchOrder[selectedWindow]);else if(page === "workspaces")focusWorkspace(workspaceOrder[selectedWorkspace]);}
+    function stepSwitch(amount){if(page === "switcher")selectedWindow=(selectedWindow+amount+Math.max(1,switchOrder.length))%Math.max(1,switchOrder.length);else if(page === "workspaces")selectedWorkspace=(selectedWorkspace+amount+Math.max(1,workspaceCards.length))%Math.max(1,workspaceCards.length);}
+    function acceptSwitch(){if(page === "switcher")focusWindow(switchOrder[selectedWindow]);else if(page === "workspaces")focusWorkspace(workspaceCards[selectedWorkspace]);}
     onSettingsVisibleChanged: {updateScan();if(settingsVisible)refreshDisplays();}
     onPageChanged: {
         updateScan();
         if(page === "") {
-            if(displayPage !== "") {closing=true;openBackground.stop();headerEntrance.stop();sideEntrance.stop();backgroundExit.restart();sideExit.restart();finishClose.restart();}
+            if(displayPage !== "") {closing=true;switcherDelay.stop();openBackground.stop();headerEntrance.stop();sideEntrance.stop();backgroundExit.restart();sideExit.restart();finishClose.restart();}
             return;
         }
         const wasClosed=displayPage === "";
+        if(wasClosed)shiftKeys=[];
         finishClose.stop();backgroundExit.stop();sideExit.stop();closing=false;displayPage=page;
         if(wasClosed) {backgroundOpacity=0;sideOffset=44;openBackground.restart();sideEntrance.restart();}
         else {backgroundOpacity=1;sideOffset=0;}
+        if(page === "switcher"){switcherReady=false;backgroundOpacity=0;openBackground.stop();switcherDelay.restart();}
         if(page === "apps") {appsOpacity=0;appsOffset=40;appsEntrance.restart();}
         if(page === "start") {appsTransition=false;titleOffset=25;titleOpacity=0;headerEntrance.restart();}
         else {titleOffset=0;titleOpacity=1;}
@@ -129,12 +137,13 @@ ShellRoot {
     NumberAnimation {id:openBackground;target:root;property:"backgroundOpacity";to:1;duration:100}
     NumberAnimation {id:sideEntrance;target:root;property:"sideOffset";to:0;duration:220;easing.type:Easing.OutCubic}
     NumberAnimation {id:sideExit;target:root;property:"sideOffset";to:44;duration:160;easing.type:Easing.InCubic}
-    SequentialAnimation {id:headerEntrance;PauseAnimation{duration:70} ParallelAnimation {
-        NumberAnimation{target:root;property:"titleOffset";to:0;duration:150;easing.type:Easing.BezierSpline;easing.bezierCurve:[.1,.9,.2,1,1,1]}
-        NumberAnimation{target:root;property:"titleOpacity";to:1;duration:150}
+    Timer {id:switcherDelay;interval:140;onTriggered:{if(root.page === "switcher"){root.switcherReady=true;openBackground.restart();}}}
+    SequentialAnimation {id:headerEntrance;PauseAnimation{duration:300} ParallelAnimation {
+        NumberAnimation{target:root;property:"titleOffset";to:0;duration:120;easing.type:Easing.BezierSpline;easing.bezierCurve:[.1,.9,.2,1,1,1]}
+        NumberAnimation{target:root;property:"titleOpacity";to:1;duration:120}
     }}
-    SequentialAnimation {id:backgroundExit;PauseAnimation{duration:170} NumberAnimation{target:root;property:"backgroundOpacity";to:0;duration:60}}
-    Timer {id:finishClose;interval:230;onTriggered:{if(root.page === "")root.displayPage="";}}
+    SequentialAnimation {id:backgroundExit;PauseAnimation{duration:250} NumberAnimation{target:root;property:"backgroundOpacity";to:0;duration:50}}
+    Timer {id:finishClose;interval:300;onTriggered:{if(root.page === "")root.displayPage="";}}
     Timer {id:appLaunchTimer;interval:150;onTriggered:{const command=root.pendingLaunch;root.pendingLaunch=[];if(command.length)root.launch(command);}}
     SettingsWindow {id:settingsWindow;shell:root}
     Connections {target:settingsWindow;function onSectionChanged(){root.updateScan();}}
@@ -147,13 +156,16 @@ ShellRoot {
     }
     function screenForFocus() { return Quickshell.screens.find(s => s.name === Hyprland.focusedMonitor?.name) || Quickshell.screens[0]; }
     function toggle(name) {
+        if(name === "switcher-accept"){if(page === "switcher")acceptSwitch();return;}
+        const reverse=name === "switcher-back";if(reverse)name="switcher";
         if(name === "control-panel") {openSettings();return;}
-        if (["switcher","workspaces"].includes(name) && page === name) {stepSwitch(1);return;}
+        if(name === "switcher" && page === name){stepSwitch(reverse ? -1 : 1);return;}
+        if(name === "workspaces" && page === name){page="";return;}
         if(name === "switcher" && !validation)Hyprland.refreshToplevels();
         activeScreen = screenForFocus(); query = ""; pendingPower = ""; errorMessage = "";
         page = page === name ? "" : name;
-        if(name === "switcher") {switchOrder=windows.slice().sort((a,b) => (a.lastIpcObject.focusHistoryID ?? 999)-(b.lastIpcObject.focusHistoryID ?? 999));selectedWindow=switchOrder.length>1 ? 1 : 0;}
-        if(name === "workspaces") {const current=workspaceOrder.findIndex(w => w.id===Hyprland.focusedWorkspace?.id);selectedWorkspace=(Math.max(0,current)+1)%Math.max(1,workspaceOrder.length);}
+        if(name === "switcher") {switchOrder=WindowList.mru(windows);selectedWindow=reverse ? Math.max(0,switchOrder.length-1) : switchOrder.length>1 ? 1 : 0;if(switchOrder.length<2)page="";}
+        if(name === "workspaces") {const current=workspaceOrder.findIndex(w => w.id===Hyprland.focusedWorkspace?.id);selectedWorkspace=Math.max(0,current);}
         if (page === "clipboard") clipProcess.running = true;
         if (page === "displays") displayProcess.running = true;
     }
@@ -193,7 +205,7 @@ ShellRoot {
     IpcHandler {
         target: "metro"
         function toggle(page: string): void { root.toggle(page); }
-        function status(): string { return JSON.stringify({page:root.page,apps:root.apps.length,tiles:root.tiles.length,screens:Quickshell.screens.length,notifications:root.history.length,query:root.query,results:root.filteredApps.length,tray:SystemTray.items.values.length,monitor:root.activeScreen?.name,polkitRegistered:polkitLoader.item?.isRegistered || false,liveNotifications:root.liveNotifications.length,stats:root.stats,displayPage:root.displayPage,closing:root.closing,backgroundOpacity:root.backgroundOpacity,pins:root.pinIds,settingsVisible:root.settingsVisible,settingsSection:settingsWindow.section,language:I18n.language,autoPalette:Theme.data.autoPalette,accent:String(Theme.accent),editMode:root.editMode,selectedWindow:root.selectedWindow,selectedWorkspace:root.selectedWorkspace,switchWindows:root.switchOrder.map(w => w.address),windowOrder:root.windows.map(w => ({address:w.address,workspace:w.workspace?.id,title:w.title})),workspaceOrder:root.workspaceOrder.map(w => w.id)}); }
+        function status(): string { return JSON.stringify({page:root.page,apps:root.apps.length,tiles:root.tiles.length,screens:Quickshell.screens.length,notifications:root.history.length,query:root.query,results:root.filteredApps.length,tray:SystemTray.items.values.length,monitor:root.activeScreen?.name,polkitRegistered:polkitLoader.item?.isRegistered || false,liveNotifications:root.liveNotifications.length,stats:root.stats,displayPage:root.displayPage,closing:root.closing,backgroundOpacity:root.backgroundOpacity,chromeOpacity:root.chromeOpacity,switcherReady:root.switcherReady,overview:overlayLoader.item?.overviewInfo() || [],pins:root.pinIds,settingsVisible:root.settingsVisible,settingsSection:settingsWindow.section,language:I18n.language,autoPalette:Theme.data.autoPalette,accent:String(Theme.accent),editMode:root.editMode,selectedWindow:root.selectedWindow,selectedWorkspace:root.selectedWorkspace,switchWindows:root.switchOrder.map(w => w.address),windowOrder:root.windows.map(w => ({address:w.address,workspace:w.workspace?.id,title:w.title})),workspaceOrder:root.workspaceOrder.map(w => w.id)}); }
         function close(): void { root.page = ""; }
         function settings(section: string): void {root.openSettings(section);}
         function hideSettings(): void {root.settingsVisible=false;}
@@ -247,7 +259,7 @@ ShellRoot {
     Connections {
         target: Hyprland
         function onRawEvent(event) {
-            if(!root.validation && /^(openwindow|closewindow)(v2)?$/.test(event.name))windowRefresh.restart();
+            if(!root.validation && /^(openwindow|closewindow|movewindow)(v2)?$/.test(event.name))windowRefresh.restart();
             if(event.name === "activelayout" && (!root.mainKeyboard || event.data.startsWith(root.mainKeyboard+",")))root.layout=event.data.toLowerCase().includes("russian") ? "RU" : "EN";
         }
     }
@@ -384,9 +396,11 @@ ShellRoot {
         }
     }
     LazyLoader {
+        id:overlayLoader
         active:!root.validation && root.displayPage !== ""
         component:PanelWindow {
         id: overlay
+        function overviewInfo(){return workspacesView.geometryReport();}
         screen:root.activeScreen
         visible:!root.validation && root.displayPage !== ""
         anchors {top:true;bottom:true;left:true;right:true}
@@ -410,21 +424,28 @@ ShellRoot {
                 id: keyboard
                 anchors.fill:parent;focus:true
                 Keys.onPressed: event => {
+                    // Alt+Shift layout toggles can replace Shift's keysym/modifier.
+                    if([50,62].includes(event.nativeScanCode) && !root.shiftKeys.includes(event.nativeScanCode))root.shiftKeys=root.shiftKeys.concat([event.nativeScanCode]);
                     if(event.key === Qt.Key_Escape) {root.page="";event.accepted=true;}
-                    else if(root.displayPage === "switcher" && event.key === Qt.Key_Tab) {root.stepSwitch(event.modifiers & Qt.ShiftModifier ? -1 : 1);event.accepted=true;}
+                    else if(["switcher","workspaces"].includes(root.page) && [Qt.Key_Tab,Qt.Key_Backtab].includes(event.key)) {root.stepSwitch(event.key === Qt.Key_Backtab || root.shiftKeys.length || event.modifiers & Qt.ShiftModifier ? -1 : 1);event.accepted=true;}
+                    else if(root.page === "workspaces" && [Qt.Key_Left,Qt.Key_Right].includes(event.key)){root.stepSwitch(event.key === Qt.Key_Left ? -1 : 1);event.accepted=true;}
                     else if(["switcher","workspaces"].includes(root.page) && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {root.acceptSwitch();event.accepted=true;}
                     else if(root.displayPage === "start" && event.text.length && !(event.modifiers & (Qt.ControlModifier|Qt.AltModifier|Qt.MetaModifier))) {root.page="search";root.query=event.text;searchField.forceActiveFocus();event.accepted=true;}
                 }
-                Keys.onReleased: event => {if(root.page === "switcher" && event.key === Qt.Key_Alt)root.acceptSwitch();else if(root.page === "workspaces" && event.key === Qt.Key_Meta)root.acceptSwitch();}
+                Keys.onReleased: event => {
+                    if([50,62].includes(event.nativeScanCode))root.shiftKeys=root.shiftKeys.filter(code => code!==event.nativeScanCode);
+                    if(root.page === "switcher" && (event.key === Qt.Key_Alt || [64,108].includes(event.nativeScanCode)))root.acceptSwitch();
+                }
                 ColumnLayout {
                     anchors.fill:parent
+                    opacity:root.displayPage === "switcher" && !root.switcherReady ? 0 : 1
                     anchors.margins:overlay.full ? Math.max(32,Math.min(100,panel.width*.05)) : 28
                     spacing:22
                     RowLayout {
                         Layout.fillWidth:true
-                        opacity:root.closing ? 0 : root.titleOpacity
+                        opacity:root.chromeOpacity
                         transform:Translate {x:root.titleOffset}
-                        Behavior on opacity {NumberAnimation {duration:root.closing ? 120 : 0}}
+                        Behavior on opacity {NumberAnimation {duration:root.closing || root.appsTransition ? 60 : 0}}
                         Label {text:I18n.tr(root.displayPage === "start" ? "Start" : root.displayPage === "apps" ? "All apps" : root.displayPage === "switcher" ? "Windows" : root.displayPage.charAt(0).toUpperCase()+root.displayPage.slice(1));font.pixelSize:overlay.full ? 52 : 36;font.weight:Font.Light;Layout.fillWidth:true}
                         MetroButton {text:I18n.tr("×");implicitWidth:44;fill:Theme.background;onClicked:root.page=""}
                     }
@@ -451,6 +472,8 @@ ShellRoot {
                     }
                     RowLayout {
                         visible:root.displayPage === "start";Layout.fillWidth:true
+                        opacity:root.chromeOpacity;transform:Translate {x:root.titleOffset}
+                        Behavior on opacity {NumberAnimation {duration:root.closing || root.appsTransition ? 60 : 0}}
                         MetroButton {text:I18n.tr("↓  All apps");onClicked:root.showAllApps()}
                         MetroButton {text:I18n.tr(root.zoomed ? "+  Expand" : "−  Groups");onClicked:root.zoomed=!root.zoomed}
                         MetroButton {text:I18n.tr(root.editMode ? "Готово" : "Изменить плитки");selected:root.editMode;onClicked:root.editMode=!root.editMode}
@@ -488,7 +511,7 @@ ShellRoot {
                         MetroButton {text:I18n.tr("Run command");visible:root.query.startsWith(">");onClicked:{root.launch(["bash","-lc",root.query.slice(1).trim()]);root.page="";}}
                     }
                     TaskSwitcher {visible:root.displayPage === "switcher";Layout.fillWidth:true;Layout.fillHeight:true;shell:root}
-                    WorkspacesView {visible:root.displayPage === "workspaces";Layout.fillWidth:true;Layout.fillHeight:true;shell:root}
+                    WorkspacesView {id:workspacesView;visible:root.displayPage === "workspaces";Layout.fillWidth:true;Layout.fillHeight:true;shell:root}
                     ColumnLayout {
                         visible:root.displayPage === "charms";Layout.fillWidth:true;spacing:12
                         Repeater {model:["Search","Share","Start","Devices","Settings","Clipboard history"]

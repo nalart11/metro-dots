@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 systemctl --user import-environment WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_CURRENT_DESKTOP DISPLAY
+if ! pgrep -u "$(id -u)" -x hyprlock >/dev/null; then
+    systemctl --user start hypr-win8-lock.service
+fi
 systemctl --user start hypr-win8-shell.service hypr-win8-clipboard-text.service hypr-win8-clipboard-image.service

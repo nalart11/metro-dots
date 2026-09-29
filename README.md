@@ -64,6 +64,14 @@ hyprctl configerrors
 
 Press Super or click the Start button. Start fills the active monitor. Type to search; Escape closes. All apps or a vertical wheel gesture opens the desktop-entry catalog with a short page transition. Horizontal scrolling accommodates narrow/scaled monitors. Groups toggles a compact tile view. Launching closes the overlay. Live music tiles toggle playback when supported.
 
+Start chrome (including the Live heading and footer controls) enters after the tiles and fades out before them. Backgrounds remain flat; opening never scales the screen.
+
+## Window switching
+
+Alt+Tab uses most recently focused windows across desktops. The current window is first, so a single press returns to the previous window. Alt+Shift+Tab cycles backward, including keyboards that already use Alt+Shift to change their layout. Modifier-only Lua callbacks retain the existing layout toggle and pass the keys through. The order stays fixed while Alt is held; closed windows disappear from that selection. Releasing Alt accepts, Escape cancels, and holding for 140 ms shows thumbnails; quick switches avoid flashing a menu.
+
+Super+Tab opens a persistent overview on the active monitor. Release Super freely. Each Desktop card shows a composed full workspace preview with wallpaper and windows at their real positions. Click a window to focus it or the Desktop heading to enter that workspace. Drag a window onto another card, or right-click it and choose Move to Desktop. The last empty card creates a new workspace when a window is dropped on it. Tab/Shift+Tab or Left/Right select desktops, Enter opens the selection and Escape closes. Previews are snapshots, not continuously captured video.
+
 ## Tiles
 
 Each JSON tile contains a stable `id`, `name`, `group`, `x`, `y`, `w`, `h`, `color` and optionally `icon`, `desktop`, `command` or `action`. Coordinates use grid units; supported sizes are 1×1, 2×1, 1×2 and 2×2. `command` is an argument array, not a shell string. Desktop IDs use installed `.desktop` entries. `live` supports clock/system/network/music/calendar/battery. Right-click an app in All Apps, a tile or a taskbar app to pin/unpin it. Start and taskbar pins are independent. The Settings application also exposes both pin controls. Start additions use a Pinned group and choose an empty grid cell; pins.json stores taskbar desktop IDs. Changes survive restarts and updates. The installer rejects overlapping or unsupported tiles. Drag any tile with the left mouse button to move it, including into another group. Drag the small bottom-right handle to resize it; Edit tiles keeps handles visible. Right-click offers exact sizes too. Neighboring tiles move into free cells with 180 ms transitions. Tiles are keyed by stable IDs so a layout save animates existing items instead of rebuilding the page. The Daily heading is hidden; user group names are retained. Names, colors and layout are editable independently of the shell.
@@ -76,7 +84,9 @@ Applications use GioUnix.DesktopAppInfo for catalog and launching. GIO honors Na
 
 Personalization has an automatic palette toggle, native unrestricted color picker and #RRGGBB input for each main role. Choosing a manual color disables automatic generation. Text choices that fall below 4.5:1 on a surface are rejected with a visible error. Changing a surface adjusts text and, when necessary, other incompatible surfaces to retain contrast. Select the role button before using its HEX field. Both modes retain their own role values; six preset accents remain available.
 
-Desktop backgrounds use a real filesystem picker/path field, history and fill/fit/stretch controls. Lock screen has an independent picker and an optional Use desktop background action. The selected lock image is rendered into `~/.config/hypr-win8/lock-wallpaper.png`, which hyprlock reads; choosing desktop wallpaper afterward leaves it unchanged. Source image files remain in place.
+Desktop backgrounds use a real filesystem picker/path field, history and fill/fit/stretch controls. Lock screen has an independent picker and an optional Use desktop background action. The selected lock image is rendered into `~/.config/hypr-win8/lock-wallpaper.png`, which hyprlock reads; choosing desktop wallpaper afterward leaves it unchanged. Source image files remain in place. The hyprlock password field uses the same surface, accent, text and error colors as the system, including automatic wallpaper palettes and light mode.
+
+A dedicated `hypr-win8-lock.service` starts from the Hyprland session-start hook with zero unlock grace. It runs at each new graphical session; updates and config reloads do not lock the current session. Startup failures are recorded in `~/.local/state/hypr-win8/lock.log` and the user journal.
 
 Language offers Русский and English using the already installed ru_RU/en_US locales. Shell text, dates, the Settings window and app catalog update live; new applications receive the selected LANG/LC_MESSAGES/LANGUAGE. Existing applications need reopening to change language. Keyboard layouts remain independent. Preference is saved in theme.json and a user environment.d file. No system locale files are modified.
 
@@ -91,8 +101,8 @@ Quick Settings contains daily controls only; Wi-Fi/Bluetooth symbol buttons togg
 | Super+Q: close | Super+Q: close; Super+Slash: Search | User preference restored; Alt+F4 removed |
 | Super+I: old settings | Super+I: compact Quick Settings | Daily controls; All settings opens the full application |
 | Super+L: session lock | Super+L: hyprlock | Independent lockscreen |
-| Super+Tab: old overview | Super+Tab: workspace selector | Metro integration |
-| Alt+Tab | Alt+Tab: window selector | Cross-workspace switching and thumbnails |
+| Super+Tab: old overview | Super+Tab: persistent workspace overview | Click windows or move them between desktops |
+| Alt+Tab / Alt+Shift+Tab | Forward / backward through recent windows | Release Alt to accept; Escape cancels |
 | Super+V: old clipboard | Super+V: clipboard history | Same workflow |
 | Print: clipboard-only capture | Print: focused-monitor capture, save and copy | Persistent screenshots |
 | Super+Shift+S | Same: region, save, copy, notify | Independent screenshot backend |
@@ -180,3 +190,9 @@ Verified on this machine: native Alt+Tab cycling and release-to-focus across wor
 Run the isolated Python checks with `python3 -B tests/display.py`, `python3 -B tests/clipboard.py`, `python3 -B tests/restore.py`, `python3 -B tests/uninstall.py`, `python3 -B tests/personalization.py` and `python3 -B tests/palette_layout.py`. They use disposable directories. The original pre-install snapshot also passes standalone restore dry-run verification. Previous recovery engines are retained as `restore-engine-before-display-update.py`; archived original dotfile contents and checksum manifests remain intact.
 
 Window lifecycle checks: `node tests/window_lifecycle.js` verifies closed splash filtering, removal from an already-open Alt+Tab list, selection preservation, and replacement when an address is reused. The shell refreshes client metadata on window open/close events and before opening Alt+Tab; it does not poll the window list continuously. A live XWayland test replaced a loader with a main window in one process while Alt+Tab stayed open, then closed the main window and verified both lists against Hyprland clients.
+
+## Verification
+
+Offline regressions: `python3 -B tests/lock_theme_startup.py`, `node tests/workspace_geometry.js`, `node tests/window_lifecycle.js` and `python3 -B tests/palette_layout.py`.
+
+After installation, `python3 tests/desktop_interaction.py --live` exercises real Alt+Tab keys, persistent Super+Tab, full workspace composition, drag/drop, the move menu and Start timing. It creates a temporary Kitty window, moves only that window, then closes it and restores the original focus and keyboard layouts. Run while the desktop is otherwise idle; this test intentionally takes keyboard/mouse focus briefly. Lock startup is checked with isolated service mocks and parser validation; this test does not lock your session or reboot.

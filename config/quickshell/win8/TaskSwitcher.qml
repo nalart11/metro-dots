@@ -9,8 +9,6 @@ GridView {
     ScrollBar.vertical:ScrollBar {}
     onVisibleChanged:if(visible)positionViewAtIndex(shell.selectedWindow,GridView.Contain)
     Connections {target:view.shell;function onSelectedWindowChanged(){view.positionViewAtIndex(view.shell.selectedWindow,GridView.Contain);}}
-    Shortcut {sequences:["Tab","Alt+Tab"];enabled:view.visible;onActivated:view.shell.stepSwitch(1)}
-    Shortcut {sequences:["Shift+Tab","Alt+Shift+Tab"];enabled:view.visible;onActivated:view.shell.stepSwitch(-1)}
     delegate:WindowPreview {
         required property var modelData
         required property int index

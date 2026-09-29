@@ -52,6 +52,9 @@ Flickable {
             required property string modelData
             required property int index
             visible:board.header(modelData)>0
+            opacity:board.shell.chromeOpacity
+            transform:Translate {x:board.shell.titleOffset}
+            Behavior on opacity {NumberAnimation {duration:board.shell.closing || board.shell.appsTransition ? 60 : 0}}
             x:index*board.stride;y:0;text:I18n.tr(modelData);font.family:Theme.font;font.pixelSize:22;color:Theme.muted
         }
     }
@@ -101,7 +104,7 @@ Flickable {
             }
             SequentialAnimation {
                 id:exitAnim
-                PauseAnimation {duration:Math.min(3,Math.max(0,board.shell.groups.length-1-tile.groupIndex))*15}
+                PauseAnimation {duration:60+Math.min(3,Math.max(0,board.shell.groups.length-1-tile.groupIndex))*15}
                 ParallelAnimation {
                     NumberAnimation {target:tile;property:"slide";to:80;duration:145;easing.type:Easing.InCubic}
                     NumberAnimation {target:tile;property:"alpha";to:0;duration:145}

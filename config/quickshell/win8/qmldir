@@ -13,3 +13,4 @@ WindowPreview 1.0 WindowPreview.qml
 TaskSwitcher 1.0 TaskSwitcher.qml
 WorkspacesView 1.0 WorkspacesView.qml
 DisplaySettings 1.0 DisplaySettings.qml
+WorkspaceScene 1.0 WorkspaceScene.qml

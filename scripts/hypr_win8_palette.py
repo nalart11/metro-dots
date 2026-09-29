@@ -90,8 +90,17 @@ def kitty(colors):
  # Preserve custom extended prompt color indices, while making them readable.
  for i in range(232,256):lines.append('color'+str(i)+' '+(bg if i%2==0 else fg))
  return '\n'.join(lines)+'\n'
+def lock_colors(data):
+ p=prepare(data)
+ mapping={'Accent':'accent','Surface':'surface','Text':'foreground','Danger':'danger','Success':'success','Muted':'muted'}
+ lines=['# HYPR-WIN8 GENERATED LOCK COLORS']
+ for name,key in mapping.items():lines.append('$metro'+name+' = rgba('+p[key][1:]+'ff)')
+ russian=p.get('language','ru')=='ru'
+ lines+=['$metroPrompt = '+('Пароль' if russian else 'Password'),'$metroFailure = '+('Неверный пароль' if russian else 'Authentication failed')]
+ return '\n'.join(lines)+'\n'
+
 def outputs(data,home):
- home=pathlib.Path(home);p=prepare(data);out={'.config/hypr-win8/kitty-colors.conf':kitty(p)}
+ home=pathlib.Path(home);p=prepare(data);out={'.config/hypr-win8/kitty-colors.conf':kitty(p),'.config/hypr-win8/hyprlock-colors.conf':lock_colors(p)}
  for version in (3,4):
   rel=f'.config/gtk-{version}.0/gtk.css';file=home/rel;original=file.read_text() if file.exists() else ''
   out[rel]=merge_css(original,p,version==4)

@@ -95,6 +95,13 @@ def window_focus(address):
  import re
  if not re.fullmatch(r'(?:0x)?[0-9a-fA-F]+',address):raise ValueError('Invalid window address')
  call(['hyprctl','eval','hl.dispatch(hl.dsp.focus({window='+json.dumps('address:'+(address if address.startswith('0x') else '0x'+address))+'}))'])
+def window_move(address,workspace):
+ import re
+ if not re.fullmatch(r'(?:0x)?[0-9a-fA-F]+',address):raise ValueError('Invalid window address')
+ workspace=int(workspace)
+ if not 0<workspace<=2147483647:raise ValueError('Invalid workspace')
+ selector='address:'+(address if address.startswith('0x') else '0x'+address)
+ call(['hyprctl','eval','hl.dispatch(hl.dsp.window.move({window='+json.dumps(selector)+',workspace='+str(workspace)+',follow=false}))'])
 def workspace_focus(identifier):
  identifier=int(identifier)
  if identifier<=0:raise ValueError('Invalid workspace')
@@ -151,11 +158,8 @@ def language(code):
  palette.atomic(H/'.config/hypr-win8/theme.json',json.dumps(t,ensure_ascii=False,indent=2)+'\n')
  locale=languages[code];rel='.config/environment.d/60-hypr-win8-locale.conf'
  palette.atomic(H/rel,'# HYPR-WIN8 GENERATED LOCALE\nLANG='+locale+'\nLC_MESSAGES='+locale+'\nLANGUAGE='+code+'\n');palette.record(H,[rel,'.config/hypr-win8/theme.json'])
- lock=H/'.config/hypr/win8/hyprlock.conf'
- if lock.exists():
-  import re
-  text=lock.read_text();text=re.sub(r'(?m)^    placeholder_text = .*$', '    placeholder_text = '+('Пароль' if code=='ru' else 'Password'),text);text=re.sub(r'(?m)^    fail_text = .*$', '    fail_text = '+('Ошибка аутентификации' if code=='ru' else 'Authentication failed'),text)
-  palette.atomic(lock,text);palette.record(H,['.config/hypr/win8/hyprlock.conf'])
+ rel_lock='.config/hypr-win8/hyprlock-colors.conf'
+ palette.atomic(H/rel_lock,palette.lock_colors(t));palette.record(H,[rel_lock])
  if H==pathlib.Path.home():
   values=['LANG='+locale,'LC_MESSAGES='+locale,'LANGUAGE='+code]
   call(['systemctl','--user','set-environment']+values)
@@ -244,6 +248,6 @@ if __name__=='__main__':
   if action in ('theme','custom-color','language','wallpaper','theme-option'):
    import fcntl
    appearance_lock=open(H/'.config/hypr-win8/appearance.lock','w');fcntl.flock(appearance_lock,fcntl.LOCK_EX)
-  {'window-focus':window_focus,'workspace-focus':workspace_focus,'metrics':metrics,'apps-watch':apps_watch,'launch':launch,'inspect-entry':inspect_entry,'clipboard-list':clipboard_list,'clipboard-copy':clipboard_copy,'theme':theme,'custom-color':custom_color,'language':language,'tile-edit':tile_edit,'wallpaper':wallpaper,'theme-option':theme_option,'pin':pin,'display-query':display.query,'display-test':display.test,'display-confirm':lambda token:display.finish(token,True),'display-revert':display.finish,'display-watch':display.watch,'displays':displays,'scale':scale,'power':power,'lock-status':lock_status,'lock-media':lock_media}[action](*args)
+  {'window-move':window_move,'window-focus':window_focus,'workspace-focus':workspace_focus,'metrics':metrics,'apps-watch':apps_watch,'launch':launch,'inspect-entry':inspect_entry,'clipboard-list':clipboard_list,'clipboard-copy':clipboard_copy,'theme':theme,'custom-color':custom_color,'language':language,'tile-edit':tile_edit,'wallpaper':wallpaper,'theme-option':theme_option,'pin':pin,'display-query':display.query,'display-test':display.test,'display-confirm':lambda token:display.finish(token,True),'display-revert':display.finish,'display-watch':display.watch,'displays':displays,'scale':scale,'power':power,'lock-status':lock_status,'lock-media':lock_media}[action](*args)
  except Exception as e:
   print(str(e),file=sys.stderr);notify(str(e));sys.exit(1)

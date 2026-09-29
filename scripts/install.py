@@ -8,7 +8,7 @@ SCRIPTS={'hypr-win8':'hypr-win8','backend.py':'hypr-win8-backend','hypr_win8_pal
 UNITS=['hypr-win8-shell.service','hypr-win8-clipboard-text.service','hypr-win8-clipboard-image.service']
 def run(args,**kw):return subprocess.run(args,check=True,**kw)
 def planned():
- out=['.config/hypr/hyprland.lua','.config/gtk-3.0/gtk.css','.config/gtk-4.0/gtk.css','.config/kitty/kitty.conf','.config/hypr-win8/kitty-colors.conf','.config/hypr-win8/lock-wallpaper.png','.config/environment.d/60-hypr-win8-locale.conf']
+ out=['.config/hypr/hyprland.lua','.config/gtk-3.0/gtk.css','.config/gtk-4.0/gtk.css','.config/kitty/kitty.conf','.config/hypr-win8/kitty-colors.conf','.config/hypr-win8/hyprlock-colors.conf','.config/hypr-win8/lock-wallpaper.png','.config/environment.d/60-hypr-win8-locale.conf']
  for folder in ['config/hypr/win8','config/quickshell/win8','config/systemd/user']:
   for p in sorted((R/folder).rglob('*')):
    if p.is_file():out.append('.'+str(p.relative_to(R)))
@@ -20,7 +20,7 @@ def main():
  missing=sorted(set(pkg for cmd,pkg in DEPENDENCIES.items() if not shutil.which(cmd)))
  if a.dry_run:
   print('PRECHECK / DRY RUN\nBackup paths:\n'+'\n'.join(snapshots.roots()))
-  print('\nManaged paths:\n'+'\n'.join(planned()));print('\nMissing packages:',', '.join(missing) or 'none');print('User services:',', '.join(UNITS));print('Preserved: custom monitors, NVIDIA environment, input, existing window/workspace binds.');return
+  print('\nManaged paths:\n'+'\n'.join(planned()));print('\nMissing packages:',', '.join(missing) or 'none');print('User services:',', '.join(UNITS)+'; hypr-win8-lock.service (new session only)');print('Preserved: custom monitors, NVIDIA environment, input, existing window/workspace binds.');return
  state=H/'.local/state/hypr-win8';state.mkdir(parents=True,exist_ok=True);log=open(state/'install.log','a',buffering=1)
  def phase(name):print(name,flush=True);log.write(datetime.datetime.now().isoformat()+' '+name+'\n')
  phase('PRECHECK')
@@ -102,7 +102,8 @@ def main():
     occupied[key]=t['name']
  import resource
  def no_core():resource.setrlimit(resource.RLIMIT_CORE,(0,0))
- lock=subprocess.run(['hyprlock','-c',str(stage/'hypr/win8/hyprlock.conf'),'--display','hypr-win8-validation-no-server'],capture_output=True,text=True,preexec_fn=no_core,timeout=5)
+ lock_check=stage/'hyprlock-validation.conf';lock_check.write_text((stage/'hypr/win8/hyprlock.conf').read_text().replace('source = ~/.config/hypr-win8/hyprlock-colors.conf','source = '+str(generated['.config/hypr-win8/hyprlock-colors.conf'])))
+ lock=subprocess.run(['hyprlock','-c',str(lock_check),'--display','hypr-win8-validation-no-server'],capture_output=True,text=True,preexec_fn=no_core,timeout=5)
  (stage/'hyprlock-validation.log').write_text(lock.stdout+lock.stderr)
  if 'Config has errors' in lock.stdout+lock.stderr or "Couldn't connect to a wayland compositor" not in lock.stdout+lock.stderr:raise RuntimeError('Hyprlock parse check failed: '+str(stage/'hyprlock-validation.log'))
  result=run(['Hyprland','--verify-config','-c',str(stage/'hypr/hyprland.lua')],capture_output=True,text=True)
