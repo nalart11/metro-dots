@@ -79,6 +79,40 @@ def known_managed():
   if (s/'VERIFIED').exists() and (s/'runtime-managed.json').exists():
    for r,hashes in json.loads((s/'runtime-managed.json').read_text()).items():out.setdefault(r,set()).update(hashes)
  return out
+def check_restored(s,live=False):
+ info=json.loads((s/'paths.json').read_text());meta=json.loads((s/'inventory.json').read_text())
+ actual=inventory(H,info['saved']);font_cache=[];generated=[];changed=[]
+ old_main=s/'backup/.config/hypr/hyprland.lua'
+ old_ui=live and old_main.is_file() and 'hyprland.shellOverrides.main' in old_main.read_text()
+ runtime_colors={'.config/gtk-3.0/gtk.css','.config/gtk-4.0/gtk.css','.config/hypr/hyprland/colors.lua','.config/hypr/hyprlock/colors.conf'}
+ def font_uuid(path):
+  try:
+   import uuid
+   text=path.read_text().strip();return len(text)==36 and str(uuid.UUID(text))==text.lower()
+  except (ValueError,OSError):return False
+ for r,v in meta.items():
+  got=actual.get(r)
+  # Fontconfig removes or regenerates deprecated .uuid cache markers on rescan.
+  if v['type']=='file' and r.startswith('.local/share/fonts/') and pathlib.Path(r).name=='.uuid':
+   if got is None or (got.get('type')=='file' and got.get('mode')==v['mode'] and font_uuid(H/r)):
+    if got is None or got.get('sha256')!=v['sha256']:font_cache.append(r)
+    continue
+  if old_ui and got and got.get('type')=='file' and got.get('mode')==v['mode']:
+   if r in runtime_colors:
+    if got.get('sha256')!=v['sha256']:generated.append(r)
+    continue
+   if r=='.config/end4-pC/config.json':
+    before=json.loads((s/'backup'/r).read_text());after=json.loads((H/r).read_text())
+    before.get('osk',{}).pop('layout',None);after.get('osk',{}).pop('layout',None)
+    before.get('background',{}).pop('wallpaperPath',None);after.get('background',{}).pop('wallpaperPath',None)
+    if before==after:
+     if got.get('sha256')!=v['sha256']:generated.append(r)
+     continue
+  if {k:x for k,x in (got or {}).items() if k not in ('uid','gid')}!={k:x for k,x in v.items() if k not in ('uid','gid')}:changed.append(r)
+ if changed:raise RuntimeError('Restoration verification failed: '+', '.join(changed))
+ if font_cache:print('Fontconfig cache UUIDs changed (originals preserved in snapshot): '+', '.join(font_cache),flush=True)
+ if generated:print('Original shell regenerated theme/preferences: '+', '.join(generated),flush=True)
+ return {'font_cache':font_cache,'generated':generated}
 def restore(s,dry=False):
  s=s.resolve();verify(s)
  if not (s/'VERIFIED').exists():raise RuntimeError('Snapshot was not fully verified')
@@ -118,10 +152,9 @@ def restore(s,dry=False):
  # Recopy missing archived files after the complete tree is in place.
  for r,v in meta.items():
   if v['type']=='file' and not os.path.lexists(H/r):run(['cp','-a','--',str(s/'backup'/r),str(H/r)])
- if inventory(H,info['saved']) != meta:
-  # Extras are intentionally retained; compare all original entries.
-  actual=inventory(H,info['saved'])
-  if any({k:x for k,x in actual.get(r,{}).items() if k not in ('uid','gid')}!={k:x for k,x in v.items() if k not in ('uid','gid')} for r,v in meta.items()):raise RuntimeError('Restoration verification failed')
+ check_restored(s,live=True)
+ activate_restored(info,current)
+def activate_restored(info,current):
  subprocess.run(['systemctl','--user','daemon-reload'],check=False)
  if H==pathlib.Path.home():
   locale_file=H/'.config/environment.d/60-hypr-win8-locale.conf'
