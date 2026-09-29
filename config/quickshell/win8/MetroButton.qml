@@ -4,6 +4,7 @@ Button {
     id: b
     property color fill: Theme.secondary
     property bool selected: false
+    property bool showFocus:true
     implicitWidth: Math.max(90, contentItem.implicitWidth + 28)
     implicitHeight: 44
     font.family: Theme.font
@@ -11,7 +12,7 @@ Button {
     padding: 12
     background: Rectangle {
         color: b.down || b.selected ? Theme.accent : b.hovered ? Qt.lighter(b.fill, 1.25) : b.fill
-        border.width: b.activeFocus ? 2 : 0
+        border.width: b.showFocus && b.activeFocus ? 2 : 0
         border.color: Theme.foreground
         Behavior on color { ColorAnimation { duration: 140 } }
     }

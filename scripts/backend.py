@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os,sys,json,time,pathlib,subprocess,shutil,shlex
 import hypr_win8_palette as palette
+import hypr_win8_display as display
 H=pathlib.Path.home()
 def call(args,**kw):return subprocess.run(args,check=True,**kw)
 def notify(text):subprocess.run(['notify-send','-a','Metro',text],check=False)
@@ -66,8 +67,38 @@ def launch(identifier):
   subprocess.Popen(['kitty','-e']+expanded,cwd=app.get_string('Path') or str(H),start_new_session=True)
  else:app.launch([],None)
 def clipboard_list():
- p=call(['cliphist','list'],capture_output=True,text=True)
- print(json.dumps([{'id':line.split('\t',1)[0],'text':line.split('\t',1)[-1]} for line in p.stdout.splitlines()[:150]],ensure_ascii=False))
+ from PIL import Image,ImageOps
+ import io,re,urllib.parse
+ p=call(['cliphist','list'],capture_output=True,text=True);out=[]
+ cache=H/'.cache/hypr-win8/clipboard'
+ if any(p.is_symlink() for p in [cache,cache.parent]):raise ValueError('Clipboard cache must not be a symlink')
+ cache.mkdir(parents=True,exist_ok=True,mode=0o700)
+ cache.chmod(0o700)
+ lines=p.stdout.splitlines()[:150];valid=set()
+ for line in lines:
+  identifier,text=line.split('\t',1);entry={'id':identifier,'text':text,'image':None}
+  if identifier.isdigit() and re.search(r'\b(png|jpeg|jpg|webp|gif|bmp)\b',text) and text.startswith('[[ binary data'):
+   file=cache/(identifier+'.png');valid.add(file.name)
+   if file.is_symlink():out.append(entry);continue
+   if not file.exists():
+    try:
+     data=call(['cliphist','decode'],input=identifier.encode(),capture_output=True).stdout
+     with Image.open(io.BytesIO(data)) as original:
+      image=ImageOps.exif_transpose(original).convert('RGBA');image.thumbnail((640,256));image.save(file,format='PNG');file.chmod(0o600)
+    except Exception:pass
+   if file.is_file() and not file.is_symlink():entry['image']=file.as_uri()
+  out.append(entry)
+ for file in cache.glob('*.png'):
+  if file.name not in valid and not file.is_symlink():file.unlink()
+ print(json.dumps(out,ensure_ascii=False))
+def window_focus(address):
+ import re
+ if not re.fullmatch(r'(?:0x)?[0-9a-fA-F]+',address):raise ValueError('Invalid window address')
+ call(['hyprctl','eval','hl.dispatch(hl.dsp.focus({window='+json.dumps('address:'+(address if address.startswith('0x') else '0x'+address))+'}))'])
+def workspace_focus(identifier):
+ identifier=int(identifier)
+ if identifier<=0:raise ValueError('Invalid workspace')
+ call(['hyprctl','eval','hl.dispatch(hl.dsp.focus({workspace='+str(identifier)+'}))'])
 def clipboard_copy(identifier):
  if not identifier.isdigit():raise ValueError('Invalid clipboard id')
  p=call(['cliphist','decode'],input=identifier.encode(),capture_output=True);call(['wl-copy'],input=p.stdout)
@@ -213,6 +244,6 @@ if __name__=='__main__':
   if action in ('theme','custom-color','language','wallpaper','theme-option'):
    import fcntl
    appearance_lock=open(H/'.config/hypr-win8/appearance.lock','w');fcntl.flock(appearance_lock,fcntl.LOCK_EX)
-  {'metrics':metrics,'apps-watch':apps_watch,'launch':launch,'inspect-entry':inspect_entry,'clipboard-list':clipboard_list,'clipboard-copy':clipboard_copy,'theme':theme,'custom-color':custom_color,'language':language,'tile-edit':tile_edit,'wallpaper':wallpaper,'theme-option':theme_option,'pin':pin,'displays':displays,'scale':scale,'power':power,'lock-status':lock_status,'lock-media':lock_media}[action](*args)
+  {'window-focus':window_focus,'workspace-focus':workspace_focus,'metrics':metrics,'apps-watch':apps_watch,'launch':launch,'inspect-entry':inspect_entry,'clipboard-list':clipboard_list,'clipboard-copy':clipboard_copy,'theme':theme,'custom-color':custom_color,'language':language,'tile-edit':tile_edit,'wallpaper':wallpaper,'theme-option':theme_option,'pin':pin,'display-query':display.query,'display-test':display.test,'display-confirm':lambda token:display.finish(token,True),'display-revert':display.finish,'display-watch':display.watch,'displays':displays,'scale':scale,'power':power,'lock-status':lock_status,'lock-media':lock_media}[action](*args)
  except Exception as e:
   print(str(e),file=sys.stderr);notify(str(e));sys.exit(1)

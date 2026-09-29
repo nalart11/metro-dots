@@ -9,3 +9,7 @@ NetworkList 1.0 NetworkList.qml
 SettingsWindow 1.0 SettingsWindow.qml
 singleton I18n 1.0 I18n.qml
 TileBoard 1.0 TileBoard.qml
+WindowPreview 1.0 WindowPreview.qml
+TaskSwitcher 1.0 TaskSwitcher.qml
+WorkspacesView 1.0 WorkspacesView.qml
+DisplaySettings 1.0 DisplaySettings.qml

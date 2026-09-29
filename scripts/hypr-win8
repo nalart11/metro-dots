@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export QT_QPA_PLATFORM=wayland
 exec quickshell -c win8 ipc call metro toggle "${1:-start}"

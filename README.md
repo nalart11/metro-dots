@@ -20,7 +20,7 @@ Screenshots are from the actual session. Wallpapers and the Linux penguin Start 
 
 Start, movable and resizable 1×1/2×1/1×2/2×2 tiles, live clock/system/network/music/calendar, All Apps, search, running windows, pinned apps, per-monitor workspaces, status notifier tray, Charms, PipeWire volume and output selection, NetworkManager Wi-Fi, BlueZ devices, notifications/history/DND, OSD, hyprlock, power confirmation, a native Polkit authentication dialog, clipboard history and screenshots. Battery and backlight controls appear only when available. Optional weather and external calendars are intentionally absent: no accounts or unreliable scraping are assumed.
 
-The switcher uses titles instead of compositor previews. Select a window, press Enter or release Alt. Super+Tab opens the workspace selector. Semantic zoom changes tile density with the Groups button. Wallpapers fill each monitor separately. Overlays select the focused monitor.
+Alt+Tab cycles recent windows across workspaces; release Alt or press Enter to focus the selection. Super+Tab cycles workspaces; release Super to switch. Both views show static compositor thumbnails with icon/title fallback. Taskbar windows follow workspace number, then their vertical/horizontal position. Context menus close after 4.5 seconds of inactivity and support unpinning. Semantic zoom changes tile density with the Groups button. Wallpapers fill each monitor separately. Overlays select the focused monitor.
 
 ## Dependencies
 
@@ -92,7 +92,7 @@ Quick Settings contains daily controls only; Wi-Fi/Bluetooth symbol buttons togg
 | Super+I: old settings | Super+I: compact Quick Settings | Daily controls; All settings opens the full application |
 | Super+L: session lock | Super+L: hyprlock | Independent lockscreen |
 | Super+Tab: old overview | Super+Tab: workspace selector | Metro integration |
-| Alt+Tab | Alt+Tab: window selector | Stable title-based switching |
+| Alt+Tab | Alt+Tab: window selector | Cross-workspace switching and thumbnails |
 | Super+V: old clipboard | Super+V: clipboard history | Same workflow |
 | Print: clipboard-only capture | Print: focused-monitor capture, save and copy | Persistent screenshots |
 | Super+Shift+S | Same: region, save, copy, notify | Independent screenshot backend |
@@ -164,3 +164,17 @@ Start animation: background 100 ms; heading begins at 70 ms with 25 px translati
 Implementation references: [Quickshell FloatingWindow](https://quickshell.org/docs/v0.2.1/types/Quickshell/FloatingWindow/), [Qt FileDialog](https://doc.qt.io/qt-6/qml-qtquick-dialogs-filedialog.html), [Hyprland layer rules](https://wiki.hypr.land/configuring/core/rules/layer-rules/).
 
 Palette/widget implementation references: [GTK named colors](https://docs.gtk.org/gtk4/css-properties.html), [Kitty set-colors](https://sw.kovidgoyal.net/kitty/remote-control/), [Qt ColorDialog](https://doc.qt.io/qt-6/qml-qtquick-dialogs-colordialog.html), [Qt WheelHandler](https://doc.qt.io/qt-6/qml-qtquick-wheelhandler.html).
+
+## Display settings
+
+Open Settings → System, or Quick Settings → Displays. Choose an advertised resolution, refresh rate and scale, or enter a custom CVT resolution and refresh rate. The mode is tested for 20 seconds. Keep confirms and persists the monitor rule; Revert restores the previous rule. A separate transient systemd user service restores it on timeout even if the shell crashes. Updates retain confirmed rules in `~/.config/hypr-win8/displays.json` and `displays.lua`. Rollback cancels display trials. No monitor name or native resolution is hardcoded.
+
+Full-desktop aspect-ratio stretching is unavailable in this machine’s NVIDIA Wayland backend; neither connected monitor exposes DDC/CI display scaling. Use the monitor’s physical aspect-ratio controls if available. Wallpaper stretch remains an independent wallpaper setting. Custom timings can be rejected by the monitor or compositor; the previous mode returns on timeout.
+
+Clipboard history is available in Charms and Quick Settings as well as Super+V. PNG/JPEG/WebP/GIF/BMP entries show private cached thumbnails in `~/.cache/hypr-win8/clipboard` (directory 0700, images 0600). Original clipboard image data is preserved when selecting an entry.
+
+## Validation of the desktop update
+
+Verified on this machine: native Alt+Tab cycling and release-to-focus across workspaces, Super+Tab cycling and release-to-switch across monitors, Wayland/XWayland thumbnail capture, full taskbar context menu and timed dismissal, clipboard image rendering and private-cache safety, zero compositor borders, live QML panels and services, custom CVT syntax through the installed Hyprland parser, and a real 20-second systemd display watchdog timeout on an unchanged native mode. Unknown display timings were not applied during testing.
+
+Run the isolated Python checks with `python3 -B tests/display.py`, `python3 -B tests/clipboard.py`, `python3 -B tests/restore.py`, `python3 -B tests/uninstall.py`, `python3 -B tests/personalization.py` and `python3 -B tests/palette_layout.py`. They use disposable directories. The original pre-install snapshot also passes standalone restore dry-run verification. Previous recovery engines are retained as `restore-engine-before-display-update.py`; archived original dotfile contents and checksum manifests remain intact.

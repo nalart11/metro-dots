@@ -6,6 +6,12 @@ Menu {
     required property var shell
     property var app: null
     property var tile: null
+    property var window:null
+    popupType:Popup.Window
+    onOpened:expiry.restart()
+    onClosed:expiry.stop()
+    onCurrentIndexChanged:if(opened)expiry.restart()
+    Timer {id:expiry;interval:4500;onTriggered:menu.close()}
     width:272;padding:4
     background:Rectangle {color:Theme.surface;border.width:1;border.color:Theme.secondary}
     component Entry: MenuItem {
@@ -14,7 +20,7 @@ Menu {
         background:Rectangle {color:entry.highlighted ? Theme.accent : "transparent"}
         contentItem:Text {text:I18n.tr(entry.text);color:entry.highlighted ? Theme.onAccent : Theme.foreground;font.family:Theme.font;font.pixelSize:14;verticalAlignment:Text.AlignVCenter}
     }
-    Entry {text:I18n.tr("Открыть");enabled:!!menu.app;onTriggered:menu.shell.launchApp(menu.app)}
+    Entry {text:I18n.tr("Открыть");enabled:!!menu.app || !!menu.window;onTriggered:{if(menu.window)menu.shell.focusWindow(menu.window);else menu.shell.launchApp(menu.app);}}
     Entry {text:I18n.tr(menu.shell.isStartPinned(menu.app?.id || "") ? "Открепить от Пуска" : "Закрепить на Пуске");enabled:!!menu.app;onTriggered:menu.shell.backend("pin",["start",menu.app.id])}
     Entry {text:I18n.tr(menu.shell.isTaskbarPinned(menu.app?.id || "") ? "Открепить от панели задач" : "Закрепить на панели задач");enabled:!!menu.app;onTriggered:menu.shell.backend("pin",["taskbar",menu.app.id])}
     Repeater {

@@ -3,8 +3,8 @@ import os,sys,pathlib,shutil,subprocess,datetime,json,hashlib,argparse,time,re
 import snapshot as snapshots
 import hypr_win8_palette as palette
 H=pathlib.Path.home();R=pathlib.Path(__file__).resolve().parent.parent
-DEPENDENCIES={'systemctl':'systemd','systemd-run':'systemd','quickshell':'quickshell','Hyprland':'hyprland','hyprlock':'hyprlock','hypridle':'hypridle','python3':'python','wl-copy':'wl-clipboard','wl-paste':'wl-clipboard','cliphist':'cliphist','grim':'grim','slurp':'slurp','wpctl':'wireplumber','nmcli':'networkmanager','notify-send':'libnotify','kitty':'kitty','hyprsunset':'hyprsunset'}
-SCRIPTS={'hypr-win8':'hypr-win8','backend.py':'hypr-win8-backend','hypr_win8_palette.py':'hypr_win8_palette.py','screenshot':'hypr-win8-screenshot','shell-start':'hypr-win8-shell-start','session-start':'hypr-win8-session-start'}
+DEPENDENCIES={'cvt':'libxcvt','systemctl':'systemd','systemd-run':'systemd','quickshell':'quickshell','Hyprland':'hyprland','hyprlock':'hyprlock','hypridle':'hypridle','python3':'python','wl-copy':'wl-clipboard','wl-paste':'wl-clipboard','cliphist':'cliphist','grim':'grim','slurp':'slurp','wpctl':'wireplumber','nmcli':'networkmanager','notify-send':'libnotify','kitty':'kitty','hyprsunset':'hyprsunset'}
+SCRIPTS={'hypr-win8':'hypr-win8','backend.py':'hypr-win8-backend','hypr_win8_palette.py':'hypr_win8_palette.py','hypr_win8_display.py':'hypr_win8_display.py','screenshot':'hypr-win8-screenshot','shell-start':'hypr-win8-shell-start','session-start':'hypr-win8-session-start'}
 UNITS=['hypr-win8-shell.service','hypr-win8-clipboard-text.service','hypr-win8-clipboard-image.service']
 def run(args,**kw):return subprocess.run(args,check=True,**kw)
 def planned():
@@ -12,7 +12,7 @@ def planned():
  for folder in ['config/hypr/win8','config/quickshell/win8','config/systemd/user']:
   for p in sorted((R/folder).rglob('*')):
    if p.is_file():out.append('.'+str(p.relative_to(R)))
- out+=['.local/share/applications/hypr-win8-settings.desktop','.config/hypr-win8/pins.json']
+ out+=['.local/share/applications/hypr-win8-settings.desktop','.config/hypr-win8/pins.json','.config/hypr-win8/displays.json','.config/hypr-win8/displays.lua']
  out+=['.local/bin/'+n for n in SCRIPTS.values()]+['.local/bin/hypr-win8-rollback','.config/hypr-win8/installed','.config/hypr-win8/theme.json','.config/hypr-win8/tiles.json']
  return out
 def main():
@@ -68,6 +68,11 @@ def main():
  theme_path=stage/'data/theme.json';theme=json.loads(theme_path.read_text());wall=theme.get('wallpaper','metro-blue.svg');wall=pathlib.Path(wall) if wall.startswith('/') else R/'assets/wallpapers'/wall
  theme=palette.prepare(theme,wall);theme_path.write_text(json.dumps(theme,ensure_ascii=False,indent=2)+'\n')
  generated={}
+ import hypr_win8_display as display
+ display_path=H/'.config/hypr-win8/displays.json'
+ display_rules=json.loads(display_path.read_text()) if display_path.exists() else {}
+ for extension,content in [('json',json.dumps(display_rules,indent=2)+'\n'),('lua',display.config(display_rules))]:
+  dest=stage/('displays.'+extension);dest.write_text(content);generated['.config/hypr-win8/displays.'+extension]=dest
  for rel,text in palette.outputs(theme,H).items():
   dest=stage/'generated'/rel;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_text(text)
   if (H/rel).exists():shutil.copymode(H/rel,dest)
@@ -149,7 +154,7 @@ def main():
   run(['systemctl','--user','is-active']+UNITS)
   errors=run(['hyprctl','configerrors'],capture_output=True,text=True).stdout.strip()
   if errors and errors!='ok':raise RuntimeError('Hyprland config errors: '+errors)
-  status=run(['quickshell','-c','win8','ipc','call','metro','status'],capture_output=True,text=True).stdout
+  status=run(['quickshell','-c','win8','ipc','call','metro','status'],capture_output=True,text=True,env=dict(os.environ,QT_QPA_PLATFORM='wayland')).stdout
   log.write(status+'\n');print(status)
   (H/'.local/state/hypr-win8/last-install-snapshot').write_text(str(s)+'\n')
   phase('COMPLETE');print('Rollback: '+str(H/'.local/bin/hypr-win8-rollback')+' --latest')

@@ -87,6 +87,10 @@ def restore(s,dry=False):
  print('Restoring snapshot:',s)
  if dry:print('DRY RUN: verify passed; would preserve current state, stop Win8 shell, restore '+str(len(meta))+' entries and reload.');return
  current=snapshot('pre-rollback');q=current/'quarantine';q.mkdir()
+ subprocess.run(['systemctl','--user','stop','hypr-win8-display-*.service'],check=False)
+ trial=H/'.local/state/hypr-win8/display-trial.json'
+ if trial.exists():
+  state=json.loads(trial.read_text());state['status']='cancelled';trial.write_text(json.dumps(state))
  subprocess.run(['systemctl','--user','stop','hypr-win8-shell.service','hypr-win8-clipboard-text.service','hypr-win8-clipboard-image.service'],check=False)
  # Added files installed by this transaction are moved aside only if untouched.
  managed=known_managed()
@@ -110,6 +114,10 @@ def restore(s,dry=False):
   if v['type']=='dir':
    if (H/r).stat().st_uid==os.getuid():shutil.copystat(s/'backup'/r,H/r,follow_symlinks=False)
    elif stat.S_IMODE((H/r).stat().st_mode)!=v['mode']:raise RuntimeError('Cannot restore permissions of non-owned directory: '+r)
+ # Fontconfig can remove deprecated .uuid cache files while fonts are copied.
+ # Recopy missing archived files after the complete tree is in place.
+ for r,v in meta.items():
+  if v['type']=='file' and not os.path.lexists(H/r):run(['cp','-a','--',str(s/'backup'/r),str(H/r)])
  if inventory(H,info['saved']) != meta:
   # Extras are intentionally retained; compare all original entries.
   actual=inventory(H,info['saved'])

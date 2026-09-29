@@ -5,7 +5,7 @@ if file then
     accent=text:match('"accent"%s*:%s*"#(%x%x%x%x%x%x)"') or accent
 end
 hl.config({
-    general = {border_size=1, gaps_in=3, gaps_out=5, col={active_border="rgba("..accent.."ff)",inactive_border="rgba(303849ff)"}},
+    general = {border_size=0, gaps_in=3, gaps_out=5, col={active_border="rgba("..accent.."ff)",inactive_border="rgba(303849ff)"}},
     decoration = {rounding=1, blur={enabled=false}, shadow={enabled=false}, dim_inactive=false},
     animations = {enabled=true},
     misc = {disable_hyprland_logo=true,disable_splash_rendering=true},
@@ -17,3 +17,7 @@ for _, leaf in ipairs({"windowsIn","windowsOut","windowsMove","fadeIn","fadeOut"
 end
 hl.layer_rule({match={namespace="^hypr-win8-overlay$"},no_anim=true})
 hl.window_rule({name="metro-settings-window",match={title="^(Параметры|Settings) — Metro$"},float=true})
+
+local displays=os.getenv("HOME").."/.config/hypr-win8/displays.lua"
+local saved=io.open(displays,"r")
+if saved then saved:close();dofile(displays) end

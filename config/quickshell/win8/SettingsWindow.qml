@@ -208,20 +208,7 @@ FloatingWindow {
         ColumnLayout {
             spacing:18
             Label {text:I18n.tr("Дисплеи");font.pixelSize:24}
-            Repeater {
-                model:settings.shell.displays
-                ColumnLayout {
-                    required property var modelData
-                    Layout.fillWidth:true
-                    Label {text:I18n.tr(modelData.name+" · "+modelData.width+" × "+modelData.height+" · "+Math.round(modelData.refreshRate)+" Гц");Layout.fillWidth:true}
-                    Flow {Layout.fillWidth:true;spacing:8
-                        property string outputName:parent.modelData.name
-                        Repeater {model:["1","1.25","1.5","2"]
-                            MetroButton {required property string modelData;text:I18n.tr(modelData+"×");implicitWidth:68;onClicked:settings.shell.backend("scale",[parent.outputName,modelData])}
-                        }
-                    }
-                }
-            }
+            DisplaySettings {Layout.fillWidth:true;shell:settings.shell}
             Label {visible:settings.shell.stats.brightness!==null;text:I18n.tr("Яркость")}
             Slider {visible:settings.shell.stats.brightness!==null;Layout.fillWidth:true;from:1;to:100;value:settings.shell.stats.brightness || 50;onMoved:settings.shell.exec(["brightnessctl","set",Math.round(value)+"%"])}
             MetroButton {text:I18n.tr(settings.shell.night ? "Ночной свет включён" : "Включить ночной свет");selected:settings.shell.night;onClicked:settings.shell.toggleNight()}
