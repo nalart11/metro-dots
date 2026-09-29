@@ -2,6 +2,7 @@
 //@ pragma Env QT_QUICK_CONTROLS_STYLE=Basic
 //@ pragma Env QS_NO_RELOAD_POPUP=1
 import QtQuick
+import "WindowList.js" as WindowList
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
@@ -74,11 +75,19 @@ ShellRoot {
     readonly property var apps: appCatalog
     readonly property var filteredApps: apps.filter(a => (a.name + " " + a.genericName + " " + a.categories.join(" ") + " " + a.keywords.join(" ")).toLowerCase().includes(query.toLowerCase()))
     property var windows:[]
-    onSortedWindowsChanged:if(windows.map(w => w?.address || "").join(",") !== sortedWindows.map(w => w.address).join(","))windows=sortedWindows
-    readonly property var sortedWindows:Hyprland.toplevels.values.filter(w => w.lastIpcObject.mapped !== false).slice().sort((a,b) => (a.workspace?.id || 0)-(b.workspace?.id || 0) || (a.lastIpcObject.at?.[1] || 0)-(b.lastIpcObject.at?.[1] || 0) || (a.lastIpcObject.at?.[0] || 0)-(b.lastIpcObject.at?.[0] || 0) || a.address.localeCompare(b.address))
+    onSortedWindowsChanged:if(!WindowList.sameObjects(windows,sortedWindows))windows=sortedWindows
+    readonly property var mappedWindows:Hyprland.toplevels.values.filter(w => w.lastIpcObject.mapped === true)
+    readonly property var sortedWindows:WindowList.sorted(mappedWindows)
+    onWindowsChanged:reconcileSwitcher()
+    function reconcileSwitcher(){
+        const next=WindowList.reconcile(switchOrder,windows,selectedWindow,page === "switcher");
+        if(!WindowList.sameObjects(switchOrder,next.windows))switchOrder=next.windows;
+        selectedWindow=next.selected;
+        if(page === "switcher" && !switchOrder.length)page="";
+    }
     readonly property var workspaceOrder:Hyprland.workspaces.values.filter(w => w.id>0).slice().sort((a,b) => a.id-b.id)
     function windowAppId(w){return w.wayland?.appId || w.lastIpcObject.class || "";}
-    function focusWindow(w){if(w?.address){page="";backend("window-focus",[w.address]);}}
+    function focusWindow(w){const live=windows.find(item => item.address === w?.address && WindowList.isMapped(item));if(live){page="";backend("window-focus",[live.address]);}}
     function focusWorkspace(w){if(w){page="";backend("workspace-focus",[String(w.id)]);}}
     function stepSwitch(amount){if(page === "switcher")selectedWindow=(selectedWindow+amount+Math.max(1,switchOrder.length))%Math.max(1,switchOrder.length);else if(page === "workspaces")selectedWorkspace=(selectedWorkspace+amount+Math.max(1,workspaceOrder.length))%Math.max(1,workspaceOrder.length);}
     function acceptSwitch(){if(page === "switcher")focusWindow(switchOrder[selectedWindow]);else if(page === "workspaces")focusWorkspace(workspaceOrder[selectedWorkspace]);}
@@ -140,6 +149,7 @@ ShellRoot {
     function toggle(name) {
         if(name === "control-panel") {openSettings();return;}
         if (["switcher","workspaces"].includes(name) && page === name) {stepSwitch(1);return;}
+        if(name === "switcher" && !validation)Hyprland.refreshToplevels();
         activeScreen = screenForFocus(); query = ""; pendingPower = ""; errorMessage = "";
         page = page === name ? "" : name;
         if(name === "switcher") {switchOrder=windows.slice().sort((a,b) => (a.lastIpcObject.focusHistoryID ?? 999)-(b.lastIpcObject.focusHistoryID ?? 999));selectedWindow=switchOrder.length>1 ? 1 : 0;}
@@ -230,10 +240,16 @@ ShellRoot {
             try {const keyboard=JSON.parse(text).keyboards.find(k => k.main);if(keyboard){root.mainKeyboard=keyboard.name;root.layout=keyboard.active_keymap.toLowerCase().includes("russian") ? "RU" : "EN";}}catch(e){console.error("Keyboard query failed: "+e);}
         }}
     }
+    // Refresh full client metadata after lifecycle events: the native model can
+    // keep a toplevel whose last IPC object was cleared after closing a splash.
+    Timer {id:windowRefresh;interval:40;running:!root.validation;onTriggered:Hyprland.refreshToplevels()}
     PwObjectTracker { objects: [root.sink] }
     Connections {
         target: Hyprland
-        function onRawEvent(event) { if(event.name === "activelayout" && (!root.mainKeyboard || event.data.startsWith(root.mainKeyboard+","))) root.layout = event.data.toLowerCase().includes("russian") ? "RU" : "EN"; }
+        function onRawEvent(event) {
+            if(!root.validation && /^(openwindow|closewindow)(v2)?$/.test(event.name))windowRefresh.restart();
+            if(event.name === "activelayout" && (!root.mainKeyboard || event.data.startsWith(root.mainKeyboard+",")))root.layout=event.data.toLowerCase().includes("russian") ? "RU" : "EN";
+        }
     }
     LazyLoader {
         id:polkitLoader
